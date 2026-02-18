@@ -1,0 +1,30 @@
+# docsHub Configuration
+# See docs/guides/configuration.md for full reference
+
+repos:
+  # Local example repository (no clone needed)
+  - name: example
+    type: local
+    path: ./example
+    docsDir: docs
+    defaultBranch: main
+
+  # Uncomment and fill in to add a GitHub repository:
+  # - name: my-github-project
+  #   type: github
+  #   url: https://github.com/your-org/your-project.git
+  #   docsDir: docs
+  #   defaultBranch: main
+  #   authMode: token
+  #   token: ghp_your_token_here
+
+  # Uncomment and fill in to add a GitLab repository:
+  # - name: my-gitlab-project
+  #   type: gitlab
+  #   url: https://gitlab.com/your-org/your-project.git
+  #   docsDir: docs
+  #   defaultBranch: main
+  #   authMode: oauth
+
+# Directory where remote repos are cloned
+cacheDir: .docshub-cache
