@@ -25,7 +25,12 @@ export function createReviewProvider(
     case "gitlab":
       return new GitLabReviewProvider(activeToken, undefined, userName);
     case "bitbucket":
-      return new BitbucketReviewProvider(activeToken, undefined, userName);
+      return new BitbucketReviewProvider(
+        activeToken,
+        repoConfig.url ? new URL(repoConfig.url).origin : undefined,
+        userName,
+        repoConfig.bitbucketVariant ?? "cloud"
+      );
     default:
       return null;
   }

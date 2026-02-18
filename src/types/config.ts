@@ -19,6 +19,12 @@ export interface RepoConfig {
   token?: string;
   /** Auth mode for reviews */
   authMode?: AuthMode;
+  /**
+   * For Bitbucket only: distinguish cloud (api.bitbucket.org) from
+   * on-premise Server / Data Center instances.
+   * Defaults to "cloud".
+   */
+  bitbucketVariant?: "cloud" | "server";
 }
 
 export interface DocsHubConfig {
