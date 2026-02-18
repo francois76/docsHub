@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { MermaidDiagram } from "./MermaidDiagram";
-import { createPortal } from "react-dom";
+import { useEffect, useRef } from "react";
 
 interface Props {
   html: string;
@@ -10,59 +8,63 @@ interface Props {
   onLineClick?: (line: number) => void;
 }
 
-interface MermaidBlock {
-  id: string;
-  diagram: string;
-  placeholder: string;
-}
-
 export function MarkdownViewer({ html, onLineClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [mermaidBlocks, setMermaidBlocks] = useState<MermaidBlock[]>([]);
-  const [, forceRender] = useState(0);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
 
-    // Find all mermaid-raw divs and extract diagrams
     const rawDivs =
-      containerRef.current.querySelectorAll<HTMLDivElement>(".mermaid-raw");
-    const blocks: MermaidBlock[] = [];
+      container.querySelectorAll<HTMLDivElement>(".mermaid-raw");
+    if (rawDivs.length === 0) return;
 
-    rawDivs.forEach((div, i) => {
-      const encoded = div.getAttribute("data-diagram") ?? "";
-      const diagram = decodeURIComponent(encoded);
-      const id = `mermaid-block-${i}-${Date.now()}`;
-      div.id = id;
-      div.setAttribute("data-mermaid-id", id);
-      blocks.push({ id, diagram, placeholder: id });
-    });
+    let cancelled = false;
 
-    setMermaidBlocks(blocks);
-    forceRender((n) => n + 1);
+    async function renderMermaid() {
+      const mermaid = (await import("mermaid")).default;
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "default",
+        securityLevel: "loose",
+      });
+
+      for (let i = 0; i < rawDivs.length; i++) {
+        if (cancelled) return;
+        const div = rawDivs[i];
+        const encoded = div.getAttribute("data-diagram") ?? "";
+        const diagram = decodeURIComponent(encoded);
+
+        try {
+          // Use a unique id that won't collide with existing DOM ids
+          const id = `mermaid-svg-${i}-${Math.random().toString(36).slice(2)}`;
+          const { svg } = await mermaid.render(id, diagram);
+          if (!cancelled) {
+            div.innerHTML = svg;
+            div.classList.add("mermaid-container");
+            div.classList.remove("mermaid-raw");
+          }
+        } catch (err) {
+          if (!cancelled) {
+            div.innerHTML = `<pre class="text-xs text-red-500 p-2 bg-red-50 rounded">Mermaid error: ${String(err)}</pre>`;
+          }
+        }
+      }
+    }
+
+    renderMermaid();
+    return () => {
+      cancelled = true;
+    };
+  // Re-run whenever the HTML changes (new doc loaded)
   }, [html]);
 
   return (
-    <div>
-      <div
-        ref={containerRef}
-        className="markdown-body"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-      {/* Render Mermaid diagrams into their placeholder divs via portals */}
-      {mermaidBlocks.map((block) => {
-        const el =
-          containerRef.current?.querySelector(`[data-mermaid-id="${block.id}"]`) as HTMLElement | null;
-        if (!el) return null;
-        return createPortal(
-          <MermaidDiagram
-            key={block.id}
-            id={block.id}
-            diagram={block.diagram}
-          />,
-          el
-        );
-      })}
-    </div>
+    <div
+      ref={containerRef}
+      className="markdown-body"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   );
 }
+
