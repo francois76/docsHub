@@ -45,9 +45,25 @@ function normalizeRepo(repo: Partial<RepoConfig>): RepoConfig {
     path: repo.path,
     docsDir: repo.docsDir ?? "docs",
     defaultBranch: repo.defaultBranch ?? "main",
-    token: repo.token,
+    token: resolveToken(repo.token),
     authMode: repo.authMode ?? "token",
   };
+}
+
+/**
+ * Resolve a token value that may reference an environment variable.
+ * Supports two syntaxes:
+ *   token: $MY_ENV_VAR          → reads process.env.MY_ENV_VAR
+ *   token: ${MY_ENV_VAR}        → same, with braces
+ * Any other value is returned as-is.
+ */
+function resolveToken(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const bracedMatch = raw.match(/^\$\{([^}]+)\}$/);
+  if (bracedMatch) return process.env[bracedMatch[1]] || undefined;
+  const bareMatch = raw.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (bareMatch) return process.env[bareMatch[1]] || undefined;
+  return raw;
 }
 
 export function getRepoConfig(name: string, config: DocsHubConfig): RepoConfig {

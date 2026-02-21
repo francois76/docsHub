@@ -37,7 +37,7 @@ Liste toutes les branches d'un dépôt (locales + distantes, dédupliquées).
 |-----------|------|-------------|
 | `repo` | `string` | Nom du dépôt (encodé URI) |
 
-**Réponse**
+**Réponse — succès**
 
 ```json
 {
@@ -47,6 +47,23 @@ Liste toutes les branches d'un dépôt (locales + distantes, dédupliquées).
   ]
 }
 ```
+
+**Réponse — dépôt inaccessible** (HTTP 200, `branches` vide)
+
+```json
+{
+  "branches": [],
+  "error": "no_token",
+  "hint": "Aucun token GITHUB configuré. Ajoutez `token` dans .docshub.yml puis cliquez sur Sync."
+}
+```
+
+| `error` | Cause |
+|---------|-------|
+| `no_token` | Dépôt distant sans token configuré |
+| `not_synced` | Token présent mais dépôt pas encore cloné |
+| `local_path_missing` | Chemin `path` introuvable (type: local) |
+| `unexpected` | Erreur inattendue (voir `hint`) |
 
 ---
 
@@ -66,7 +83,7 @@ Retourne l'arborescence du dossier `docs/` à une branche donnée.
 |-----------|------|--------|-------------|
 | `branch` | `string` | `main` | Branche cible |
 
-**Réponse** — structure récursive de `FileTreeNode`
+**Réponse — succès** — structure récursive de `FileTreeNode`
 
 ```json
 {
@@ -75,9 +92,22 @@ Retourne l'arborescence du dossier `docs/` à une branche donnée.
       "name": "README.md",
       "path": "docs/README.md",
       "type": "file"
-    },
-    {
-      "name": "guides",
+    }
+  ]
+}
+```
+
+**Réponse — dépôt inaccessible** (HTTP 200, `tree` vide)
+
+```json
+{
+  "tree": [],
+  "error": "no_token",
+  "hint": "Aucun token GITHUB configuré. Ajoutez `token` dans .docshub.yml puis cliquez sur Sync."
+}
+```
+
+Mêmes codes `error` que `/branches` (voir ci-dessus).
       "path": "docs/guides",
       "type": "directory",
       "children": [
@@ -137,11 +167,29 @@ Pour les dépôts locaux (`type: local`), retourne immédiatement sans action.
 |-----------|------|-------------|
 | `repo` | `string` | Nom du dépôt |
 
-**Réponse**
+**Réponse — succès**
 
 ```json
 { "success": true, "message": "Repository synced" }
 ```
+
+**Réponse — erreur** (HTTP 500)
+
+```json
+{
+  "error": "Authentification échouée — aucun token GITHUB n'est configuré. Ajoutez `token` dans .docshub.yml.",
+  "rawError": "Error: remote: Invalid username or password."
+}
+```
+
+Les messages d'erreur sont traduits en langage naturel pour les cas courants :
+
+| Pattern détecté | Message retourné |
+|----------------|------------------|
+| `authentication failed`, `401` | Token absent ou invalide/expiré |
+| `repository not found`, `404` | URL incorrecte dans `.docshub.yml` |
+| `permission denied`, `403` | Droits insuffisants sur le dépôt |
+| `could not resolve host` | Problème réseau |
 
 ---
 

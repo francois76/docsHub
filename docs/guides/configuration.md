@@ -122,8 +122,22 @@ Token d'accès personnel pour les opérations Git (clone/fetch) et les revues en
 | Bitbucket Cloud | `username:app_password` |
 | Bitbucket Server | `username:personal_token` |
 
+**Token en clair** (déconseillé — sera versionné avec `.docshub.yml`) :
 ```yaml
 token: ghp_xxxxxxxxxxxxxxxxxxxx
+```
+
+**Token depuis une variable d'environnement** (recommandé) :
+```yaml
+token: $MY_GITHUB_TOKEN        # syntaxe $VAR
+token: ${MY_GITHUB_TOKEN}      # syntaxe ${VAR} (équivalente)
+```
+
+La valeur est résolue au démarrage depuis `process.env`. Si la variable n'est pas définie, le champ `token` est considéré absent et l'application affiche un message d'erreur explicite.
+
+Définissez la variable dans `.env.local` (non versionné) :
+```dotenv
+MY_GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
 ```
 
 ---

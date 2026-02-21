@@ -91,7 +91,7 @@ sequenceDiagram
 ```mermaid
 graph TD
     LP["layout.tsx\n(root layout)"] --> AP["AuthProvider"]
-    AP --> TB["TopBar\n(repo + branch selectors, sync)"]
+    AP --> TB["TopBar\n(repo + branch selectors, sync,\nbarre de progression, modal erreur)"]
     AP --> DS["DocsSidebar\n(file tree)"]
     AP --> CP["[...path]/page.tsx\n(page principale)"]
 
@@ -189,10 +189,18 @@ stateDiagram-v2
 
     Absent --> Clonage: sync() appelé\n(GitService.sync)
     Clonage --> Disponible: clone réussi
+    Clonage --> Erreur: clone échoué\n(auth, réseau, URL)
+
+    Erreur --> Clonage: Bouton sync\n(après correction config)
 
     Disponible --> Synchronisation: Bouton sync\nou accès après TTL
     Synchronisation --> Disponible: fetch --all --prune
+    Synchronisation --> Erreur: fetch échoué
 
     Disponible --> Lecture: Requête API\n(branches, tree, file)
     Lecture --> Disponible: Réponse retournée
+
+    note right of Erreur
+        L'API retourne { error, hint }\nL'IHM affiche un message lisible\n(icône ⚠️ + modal de sync)
+    end note
 ```

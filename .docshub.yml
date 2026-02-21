@@ -16,8 +16,7 @@ repos:
     docsDir: docs
     defaultBranch: main
     authMode: token
-    # token: ghp_your_token_here  # Décommentez et renseignez pour les revues de PR
-    #                               Pour la lecture seule d'un repo public, non nécessaire
+    token: $MY_GITHUB_TOKEN  
 
   # Uncomment and fill in to add a GitHub repository:
   # - name: my-github-project
@@ -26,7 +25,7 @@ repos:
   #   docsDir: docs
   #   defaultBranch: main
   #   authMode: token
-  #   token: ghp_your_token_here
+  #   token: $MY_GITHUB_TOKEN
 
   # Uncomment and fill in to add a GitLab repository:
   # - name: my-gitlab-project
