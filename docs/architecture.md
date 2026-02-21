@@ -66,8 +66,8 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     participant User as Utilisateur
-    participant Page as docs/[repo]/[branch]/[...path]
-    participant API as /api/repos/[repo]/file
+    participant Page as "docs/[repo]/[branch]/[...path]"
+    participant API as "/api/repos/[repo]/file"
     participant GS as GitService
     participant MD as markdown.ts
     participant GIT as Dépôt Git (cache)
@@ -98,13 +98,13 @@ graph TD
     CP --> MV["MarkdownViewer\n(dangerouslySetInnerHTML)"]
     CP --> RP["ReviewPanel\n(affiché si PR ouverte)"]
 
-    MV -->|portal| MMD["MermaidDiagram\n(client component)"]
+    MV --> MMD["MermaidDiagram\n(client component)"]
 
     TB -->|GET /api/repos| API1["API: liste des repos"]
-    TB -->|GET /api/repos/[repo]/branches| API2["API: branches"]
-    TB -->|POST /api/repos/[repo]/sync| API3["API: sync"]
-    DS -->|GET /api/repos/[repo]/tree| API4["API: file tree"]
-    RP -->|GET+POST /api/reviews/[repo]| API5["API: reviews"]
+    TB -->|"GET /api/repos/{repo}/branches"| API2["API: branches"]
+    TB -->|"POST /api/repos/{repo}/sync"| API3["API: sync"]
+    DS -->|"GET /api/repos/{repo}/tree"| API4["API: file tree"]
+    RP -->|"GET+POST /api/reviews/{repo}"| API5["API: reviews"]
 ```
 
 ---
@@ -150,7 +150,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    A["Route API"] -->|getGitService(name)| R["git-registry.ts\n(Map: name → GitService)"]
+    A["Route API"] -->|"getGitService(name)"| R["git-registry.ts\n(Map: name → GitService)"]
     R -->|new si absent| G["GitService\n(simple-git)"]
     G -->|repoPath| C[".docshub-cache/{name}"]
 ```
@@ -168,7 +168,7 @@ sequenceDiagram
     participant Mermaid as MermaidDiagram
 
     Server->>Server: markdown-it.render(raw)
-    Note over Server: Les blocs ```mermaid``` sont<br/>convertis en <div class="mermaid">
+    Note over Server: Les blocs mermaid sont convertis en div.mermaid
     Server->>Server: Shiki colore les autres blocs de code
     Server-->>Client: HTML complet
 
