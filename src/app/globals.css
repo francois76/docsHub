@@ -192,6 +192,11 @@
   @apply max-w-full;
 }
 
+/* Prevent double scrollbar: the container already handles overflow */
+.mermaid-container pre {
+  overflow: visible;
+}
+
 /* Shiki code blocks */
 .shiki {
   @apply rounded-lg overflow-x-auto text-sm;

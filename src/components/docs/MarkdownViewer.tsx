@@ -115,7 +115,9 @@ export function MarkdownViewer({ html, onLineClick }: Props) {
           }
         } catch (err) {
           if (!cancelled) {
-            div.innerHTML = `<pre class="text-xs text-red-500 p-2 bg-red-50 rounded">Mermaid error: ${String(err)}</pre>`;
+            div.innerHTML = `<div class="text-xs text-red-500 font-mono whitespace-pre-wrap break-all">Mermaid error: ${String(err)}</div>`;
+            div.classList.add("mermaid-container");
+            div.classList.remove("mermaid-raw");
           }
         }
       }
