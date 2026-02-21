@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 interface Props {
   html: string;
@@ -12,55 +10,10 @@ interface Props {
 
 const MAXIMIZE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>`;
 
-function FullscreenModal({
-  svgHtml,
-  onClose,
-}: {
-  svgHtml: string;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="relative max-h-[90vh] max-w-[90vw] w-full overflow-auto rounded-xl bg-white p-8 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute right-3 top-3 rounded-md p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-          aria-label="Fermer"
-        >
-          <X className="h-5 w-5" />
-        </button>
-        <div
-          className="flex items-center justify-center [&_svg]:max-w-full [&_svg]:h-auto"
-          dangerouslySetInnerHTML={{ __html: svgHtml }}
-        />
-      </div>
-    </div>,
-    document.body
-  );
-}
+const CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
 
 export function MarkdownViewer({ html, onLineClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [fullscreenSvg, setFullscreenSvg] = useState<string | null>(null);
-  // Use a ref so the DOM click handler always has the latest setter (no stale closure)
-  const setFullscreenRef = useRef(setFullscreenSvg);
-  setFullscreenRef.current = setFullscreenSvg;
-
-  const closeFullscreen = useCallback(() => setFullscreenSvg(null), []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -71,6 +24,37 @@ export function MarkdownViewer({ html, onLineClick }: Props) {
     if (rawDivs.length === 0) return;
 
     let cancelled = false;
+    let overlay: HTMLDivElement | null = null;
+
+    function openFullscreen(svgHtml: string) {
+      overlay = document.createElement("div");
+      overlay.className = "mermaid-fullscreen-overlay";
+      overlay.innerHTML = `
+        <div class="mermaid-fullscreen-modal">
+          <button class="mermaid-fullscreen-close" aria-label="Fermer">${CLOSE_ICON}</button>
+          <div class="mermaid-fullscreen-content">${svgHtml}</div>
+        </div>`;
+      document.body.appendChild(overlay);
+
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) closeFullscreen();
+      });
+      overlay
+        .querySelector(".mermaid-fullscreen-close")
+        ?.addEventListener("click", closeFullscreen);
+    }
+
+    function closeFullscreen() {
+      if (overlay && overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+        overlay = null;
+      }
+    }
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && overlay) closeFullscreen();
+    }
+    window.addEventListener("keydown", handleKeyDown);
 
     async function renderMermaid() {
       const mermaid = (await import("mermaid")).default;
@@ -87,7 +71,6 @@ export function MarkdownViewer({ html, onLineClick }: Props) {
         const diagram = decodeURIComponent(encoded);
 
         try {
-          // Use a unique id that won't collide with existing DOM ids
           const id = `mermaid-svg-${i}-${Math.random().toString(36).slice(2)}`;
           const { svg } = await mermaid.render(id, diagram);
           if (!cancelled) {
@@ -95,8 +78,6 @@ export function MarkdownViewer({ html, onLineClick }: Props) {
             div.classList.add("mermaid-container");
             div.classList.remove("mermaid-raw");
 
-            // Wrap the rendered diagram in a relative container and add a
-            // fullscreen button that extracts the already-rendered SVG.
             const wrapper = document.createElement("div");
             wrapper.className = "mermaid-wrapper";
             div.parentNode?.insertBefore(wrapper, div);
@@ -109,7 +90,7 @@ export function MarkdownViewer({ html, onLineClick }: Props) {
             btn.innerHTML = MAXIMIZE_ICON;
             btn.addEventListener("click", () => {
               const svgEl = div.querySelector("svg");
-              if (svgEl) setFullscreenRef.current(svgEl.outerHTML);
+              if (svgEl) openFullscreen(svgEl.outerHTML);
             });
             wrapper.appendChild(btn);
           }
@@ -126,21 +107,19 @@ export function MarkdownViewer({ html, onLineClick }: Props) {
     renderMermaid();
     return () => {
       cancelled = true;
+      window.removeEventListener("keydown", handleKeyDown);
+      closeFullscreen();
     };
   // Re-run whenever the HTML changes (new doc loaded)
   }, [html]);
 
   return (
-    <>
-      <div
-        ref={containerRef}
-        className="markdown-body"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-      {fullscreenSvg && (
-        <FullscreenModal svgHtml={fullscreenSvg} onClose={closeFullscreen} />
-      )}
-    </>
+    <div
+      ref={containerRef}
+      className="markdown-body"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   );
 }
+
 

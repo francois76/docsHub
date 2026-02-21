@@ -184,6 +184,62 @@
   color: #374151;
 }
 
+/* Fullscreen overlay — pure DOM, no React state */
+.mermaid-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.mermaid-fullscreen-modal {
+  position: relative;
+  max-height: 90vh;
+  max-width: 90vw;
+  width: 100%;
+  overflow: auto;
+  background: white;
+  border-radius: 0.75rem;
+  padding: 2rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.mermaid-fullscreen-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.mermaid-fullscreen-close:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.mermaid-fullscreen-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mermaid-fullscreen-content svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .mermaid-container {
   @apply flex justify-center my-6 p-4 bg-muted/30 rounded-lg overflow-x-auto;
 }
