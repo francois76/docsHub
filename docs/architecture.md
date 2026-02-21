@@ -100,7 +100,8 @@ graph TD
     RP --> RB["ReviewBar\n(barre de revue en bas)"]
 
     MAIN --> CP["[...path]/page.tsx\n(page principale)"]
-    CP --> MV["MarkdownViewer\n(dangerouslySetInnerHTML\n+ annotations inline)"]
+    CP --> MV["MarkdownViewer"]
+    MV --> MC["MarkdownContent\n(React.memo —\ndangerouslySetInnerHTML)"]
     MV --> MMD["Mermaid\n(client-side rendering)"]
     MV --> IC["Commentaires inline\n(DOM manipulation + portals)"]
 
@@ -184,16 +185,18 @@ sequenceDiagram
     Server->>Server: Shiki colore les autres blocs de code
     Server-->>Client: HTML complet (avec attributs de ligne)
 
-    Client->>Client: dangerouslySetInnerHTML
+    Client->>Client: MarkdownContent (React.memo)<br/>dangerouslySetInnerHTML
+    Note over Client: Le memo empêche React de<br/>réinitialiser innerHTML lors<br/>des changements d'état internes
     Client->>Client: Détecte .mermaid-raw dans le DOM
     Client->>Mermaid: import("mermaid") + render
     Mermaid-->>Client: SVG injecté
 
     alt PR ouverte
         Client->>Review: Scan [data-source-line-start] (enfants directs)
-        Review->>Review: Ajoute boutons "+" dans le gutter
+        Review->>Review: Ajoute boutons "+" dans le gutter (type=button, data-line=X)
         Review->>Review: Insère commentaires inline (DOM)
-        Note over Review: Le formulaire de commentaire<br/>est un React portal
+        Note over Review: Le formulaire de commentaire<br/>est un React portal<br/>Fermeture : Échap, Annuler ou clic sur "+"
+        Note over Review: Quand un form est ouvert :<br/>tous les "+" restent visibles (CSS class)<br/>le bouton actif est mis en évidence
     end
 ```
 

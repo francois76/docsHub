@@ -295,6 +295,20 @@
   background: hsl(var(--primary) / 0.08);
 }
 
+/* When any inline form is open, keep ALL "+" buttons faintly visible
+   so the user knows they can switch to a different line */
+.review-has-active-comment .review-line-plus {
+  color: hsl(var(--primary) / 0.35);
+  border-color: hsl(var(--primary) / 0.35);
+}
+
+/* The specific "+" button whose form is currently open */
+.review-line-plus--active {
+  color: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary)) !important;
+  background: hsl(var(--primary) / 0.15) !important;
+}
+
 .review-line-plus:hover {
   background: hsl(var(--primary)) !important;
   color: white !important;

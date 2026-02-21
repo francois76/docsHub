@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { Send, X, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,27 @@ function escapeHtml(str: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+/* ────────────────────────────────────────────────────────────── */
+/*  Memoized HTML container – prevents React from resetting       */
+/*  innerHTML on parent state changes (addingAtLine, etc.)        */
+/* ────────────────────────────────────────────────────────────── */
+
+const MarkdownContent = memo(function MarkdownContent({
+  html,
+  innerRef,
+}: {
+  html: string;
+  innerRef: Ref<HTMLDivElement>;
+}) {
+  return (
+    <div
+      ref={innerRef}
+      className="markdown-body"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+});
 
 /* ────────────────────────────────────────────────────────────── */
 /*  MarkdownViewer                                                */
@@ -183,15 +204,15 @@ export function MarkdownViewer({ html, filePath }: Props) {
 
       /* "+" button in left gutter */
       const plusBtn = document.createElement("button");
+      plusBtn.type = "button";
       plusBtn.className = "review-line-plus";
+      plusBtn.dataset.line = String(lineStart);
       plusBtn.textContent = "+";
       plusBtn.title = `Commenter ligne ${lineStart}`;
       plusBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        setAddingAtLine((prev) =>
-          prev === lineStart ? null : lineStart
-        );
+        setAddingAtLine((prev) => (prev === lineStart ? null : lineStart));
       });
       block.prepend(plusBtn);
       cleanups.push(() => plusBtn.remove());
@@ -233,13 +254,6 @@ export function MarkdownViewer({ html, filePath }: Props) {
   /* ──────────────────────────────────────────────────────────── */
   useEffect(() => {
     const container = containerRef.current;
-
-    /* Clean up existing container */
-    if (formContainer) {
-      formContainer.remove();
-      setFormContainer(null);
-    }
-
     if (!container || addingAtLine === null) return;
 
     const allBlocks = container.querySelectorAll<HTMLElement>(
@@ -268,22 +282,48 @@ export function MarkdownViewer({ html, filePath }: Props) {
         }
         insertAfter.after(formDiv);
         setFormContainer(formDiv);
-        return;
+
+        return () => {
+          formDiv.remove();
+          setFormContainer(null);
+        };
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addingAtLine, html]);
+
+  /* ──────────────────────────────────────────────────────────── */
+  /*  Active-line highlight & "+" visibility when form is open   */
+  /* ──────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    /* Remove any previous active marker */
+    container
+      .querySelectorAll<HTMLElement>(".review-line-plus--active")
+      .forEach((el) => el.classList.remove("review-line-plus--active"));
+
+    if (addingAtLine === null) {
+      container.classList.remove("review-has-active-comment");
+      return;
+    }
+
+    /* Make all "+" buttons faintly visible while form is open */
+    container.classList.add("review-has-active-comment");
+
+    /* Highlight the specific button for the active line */
+    const activeBtn = container.querySelector<HTMLElement>(
+      `.review-line-plus[data-line="${addingAtLine}"]`
+    );
+    activeBtn?.classList.add("review-line-plus--active");
+  }, [addingAtLine]);
 
   /* ──────────────────────────────────────────────────────────── */
   /*  Render                                                      */
   /* ──────────────────────────────────────────────────────────── */
   return (
     <div className={isReviewMode ? "review-mode" : undefined}>
-      <div
-        ref={containerRef}
-        className="markdown-body"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+      <MarkdownContent html={html} innerRef={containerRef} />
       {formContainer &&
         addingAtLine !== null &&
         filePath &&
@@ -316,6 +356,20 @@ function AddCommentForm({
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  /* Close on Escape key */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+    // onClose is stable (setAddingAtLine is a stable React setter)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleSubmit = async () => {
     if (!body.trim() || !review) return;
     setSubmitting(true);
@@ -333,6 +387,7 @@ function AddCommentForm({
           Commentaire ligne {line}
         </span>
         <button
+          type="button"
           onClick={onClose}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
@@ -342,7 +397,10 @@ function AddCommentForm({
       <Textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        placeholder="Votre commentaire…"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleSubmit();
+        }}
+        placeholder="Votre commentaire… (Échap pour fermer, Ctrl+Entrée pour envoyer)"
         rows={3}
         className="text-sm resize-none mb-2"
         autoFocus
