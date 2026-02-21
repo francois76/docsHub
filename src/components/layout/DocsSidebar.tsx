@@ -8,6 +8,7 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  AlertTriangle,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -23,14 +24,21 @@ interface Props {
 export function DocsSidebar({ repo, branch, activePath }: Props) {
   const [tree, setTree] = useState<FileTreeNode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [treeError, setTreeError] = useState<{ code: string; hint: string } | null>(null);
 
   useEffect(() => {
     setLoading(true);
+    setTreeError(null);
     fetch(
       `/api/repos/${encodeURIComponent(repo)}/tree?branch=${encodeURIComponent(branch)}`
     )
       .then((r) => r.json())
-      .then((d) => setTree(d.tree ?? []))
+      .then((d) => {
+        setTree(d.tree ?? []);
+        if (d.error) {
+          setTreeError({ code: d.error, hint: d.hint ?? "Impossible de charger les fichiers." });
+        }
+      })
       .finally(() => setLoading(false));
   }, [repo, branch]);
 
@@ -43,10 +51,28 @@ export function DocsSidebar({ repo, branch, activePath }: Props) {
       </div>
       <ScrollArea className="flex-1">
         {loading ? (
-          <div className="p-4 text-sm text-muted-foreground">Loading…</div>
+          <div className="p-4 text-sm text-muted-foreground">Chargement…</div>
+        ) : treeError ? (
+          <div className="p-4 flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 text-amber-600">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span className="text-sm font-medium">
+                {treeError.code === "no_token"
+                  ? "Token manquant"
+                  : treeError.code === "not_synced"
+                  ? "Dépôt non synchronisé"
+                  : treeError.code === "local_path_missing"
+                  ? "Chemin introuvable"
+                  : "Erreur"}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {treeError.hint}
+            </p>
+          </div>
         ) : tree.length === 0 ? (
           <div className="p-4 text-sm text-muted-foreground">
-            No docs found on this branch.
+            Aucun document trouvé sur cette branche.
           </div>
         ) : (
           <div className="p-2">

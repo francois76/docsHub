@@ -6,13 +6,20 @@ import type { BranchInfo, FileTreeNode } from "@/types/git";
 
 export class GitService {
   private repoPath: string;
-  private git: SimpleGit;
+  private _git: SimpleGit | null = null;
   private config: RepoConfig;
 
   constructor(repoPath: string, config: RepoConfig) {
     this.repoPath = repoPath;
     this.config = config;
-    this.git = simpleGit(repoPath);
+  }
+
+  /** Lazy simpleGit instance — only created once the directory is known to exist. */
+  private get git(): SimpleGit {
+    if (!this._git) {
+      this._git = simpleGit(this.repoPath);
+    }
+    return this._git;
   }
 
   /** Clone or pull the repo to keep it in sync */
@@ -133,6 +140,10 @@ export class GitService {
   /** Check if the repo is accessible */
   async isAvailable(): Promise<boolean> {
     try {
+      // Guard against simple-git throwing before it can even start
+      if (!fs.existsSync(this.repoPath) || !fs.existsSync(path.join(this.repoPath, ".git"))) {
+        return false;
+      }
       await this.git.status();
       return true;
     } catch {

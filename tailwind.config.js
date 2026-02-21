@@ -8,6 +8,16 @@ module.exports = {
   ],
   theme: {
     extend: {
+      keyframes: {
+        indeterminate: {
+          "0%": { transform: "translateX(-100%) scaleX(0.4)" },
+          "40%": { transform: "translateX(0%) scaleX(0.6)" },
+          "100%": { transform: "translateX(200%) scaleX(0.4)" },
+        },
+      },
+      animation: {
+        indeterminate: "indeterminate 1.5s ease-in-out infinite",
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
