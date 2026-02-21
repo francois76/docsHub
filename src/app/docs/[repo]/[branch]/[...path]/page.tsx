@@ -53,7 +53,7 @@ export default async function DocFilePage({ params }: Props) {
 
   return (
     <div className="p-6 lg:p-8 max-w-4xl">
-      <MarkdownViewer html={html} />
+      <MarkdownViewer html={html} filePath={filePath} />
     </div>
   );
 }

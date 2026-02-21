@@ -1,20 +1,63 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Send, X, MessageSquare } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { useReview } from "./ReviewContext";
+import type { ReviewComment } from "@/lib/review/types";
 
-interface Props {
-  html: string;
-  /** Called when user clicks on a line number for inline commenting */
-  onLineClick?: (line: number) => void;
-}
+/* ────────────────────────────────────────────────────────────── */
+/*  SVG icons reused from the old file (Mermaid fullscreen)       */
+/* ────────────────────────────────────────────────────────────── */
 
 const MAXIMIZE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>`;
 
 const CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
 
-export function MarkdownViewer({ html, onLineClick }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
+/* ────────────────────────────────────────────────────────────── */
+/*  Helpers                                                       */
+/* ────────────────────────────────────────────────────────────── */
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/* ────────────────────────────────────────────────────────────── */
+/*  MarkdownViewer                                                */
+/* ────────────────────────────────────────────────────────────── */
+
+interface Props {
+  html: string;
+  /** File path relative to repo root (e.g. "docs/README.md") */
+  filePath?: string;
+}
+
+export function MarkdownViewer({ html, filePath }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const review = useReview();
+  const isReviewMode = !!(review?.pr && filePath);
+
+  /* state for inline comment form */
+  const [addingAtLine, setAddingAtLine] = useState<number | null>(null);
+  const [formContainer, setFormContainer] = useState<HTMLDivElement | null>(
+    null
+  );
+
+  /* reset form when file changes */
+  useEffect(() => {
+    setAddingAtLine(null);
+  }, [filePath]);
+
+  /* ──────────────────────────────────────────────────────────── */
+  /*  Mermaid rendering (unchanged logic from original)           */
+  /* ──────────────────────────────────────────────────────────── */
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -110,16 +153,219 @@ export function MarkdownViewer({ html, onLineClick }: Props) {
       window.removeEventListener("keydown", handleKeyDown);
       closeFullscreen();
     };
-  // Re-run whenever the HTML changes (new doc loaded)
   }, [html]);
 
+  /* ──────────────────────────────────────────────────────────── */
+  /*  Review inline annotations                                   */
+  /* ──────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !isReviewMode || !review) return;
+
+    const fileComments = review.comments.filter((c) => c.path === filePath);
+    const cleanups: (() => void)[] = [];
+
+    /* Only annotate direct children of the markdown body */
+    const allBlocks = container.querySelectorAll<HTMLElement>(
+      "[data-source-line-start]"
+    );
+    const directBlocks = Array.from(allBlocks).filter(
+      (el) => el.parentElement === container
+    );
+
+    directBlocks.forEach((block) => {
+      const lineStart = parseInt(
+        block.getAttribute("data-source-line-start")!
+      );
+      const lineEnd = parseInt(block.getAttribute("data-source-line-end")!);
+
+      block.classList.add("review-annotated-block");
+
+      /* "+" button in left gutter */
+      const plusBtn = document.createElement("button");
+      plusBtn.className = "review-line-plus";
+      plusBtn.textContent = "+";
+      plusBtn.title = `Commenter ligne ${lineStart}`;
+      plusBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setAddingAtLine((prev) =>
+          prev === lineStart ? null : lineStart
+        );
+      });
+      block.prepend(plusBtn);
+      cleanups.push(() => plusBtn.remove());
+
+      /* Inline comments attached to this block's line range */
+      const blockComments = fileComments.filter(
+        (c) =>
+          c.line !== undefined && c.line >= lineStart && c.line <= lineEnd
+      );
+
+      if (blockComments.length > 0) {
+        const commentsDiv = document.createElement("div");
+        commentsDiv.className = "inline-comments-group";
+        blockComments.forEach((c) => {
+          const card = document.createElement("div");
+          card.className = `inline-comment-card${c.isOwn ? " own" : ""}`;
+          card.innerHTML = `
+            <div class="inline-comment-header">
+              <span class="inline-comment-author">${escapeHtml(c.author)}</span>
+              ${c.line ? `<span class="inline-comment-line">L${c.line}</span>` : ""}
+              <span class="inline-comment-time">${new Date(c.createdAt).toLocaleString()}</span>
+            </div>
+            <div class="inline-comment-body">${escapeHtml(c.body)}</div>
+          `;
+          commentsDiv.appendChild(card);
+        });
+        block.after(commentsDiv);
+        cleanups.push(() => commentsDiv.remove());
+      }
+    });
+
+    return () => {
+      cleanups.forEach((fn) => fn());
+    };
+  }, [html, isReviewMode, review?.pr, review?.comments, filePath]);
+
+  /* ──────────────────────────────────────────────────────────── */
+  /*  Comment form container (portal target)                      */
+  /* ──────────────────────────────────────────────────────────── */
+  useEffect(() => {
+    const container = containerRef.current;
+
+    /* Clean up existing container */
+    if (formContainer) {
+      formContainer.remove();
+      setFormContainer(null);
+    }
+
+    if (!container || addingAtLine === null) return;
+
+    const allBlocks = container.querySelectorAll<HTMLElement>(
+      "[data-source-line-start]"
+    );
+    const directBlocks = Array.from(allBlocks).filter(
+      (el) => el.parentElement === container
+    );
+
+    for (const block of directBlocks) {
+      const lineStart = parseInt(
+        block.getAttribute("data-source-line-start")!
+      );
+      if (lineStart === addingAtLine) {
+        const formDiv = document.createElement("div");
+        formDiv.className = "inline-add-comment-container";
+
+        /* Insert after the block (and after any existing comment group) */
+        let insertAfter: Element = block;
+        while (
+          insertAfter.nextElementSibling?.classList.contains(
+            "inline-comments-group"
+          )
+        ) {
+          insertAfter = insertAfter.nextElementSibling;
+        }
+        insertAfter.after(formDiv);
+        setFormContainer(formDiv);
+        return;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addingAtLine, html]);
+
+  /* ──────────────────────────────────────────────────────────── */
+  /*  Render                                                      */
+  /* ──────────────────────────────────────────────────────────── */
   return (
-    <div
-      ref={containerRef}
-      className="markdown-body"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <div className={isReviewMode ? "review-mode" : undefined}>
+      <div
+        ref={containerRef}
+        className="markdown-body"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      {formContainer &&
+        addingAtLine !== null &&
+        filePath &&
+        createPortal(
+          <AddCommentForm
+            line={addingAtLine}
+            filePath={filePath}
+            onClose={() => setAddingAtLine(null)}
+          />,
+          formContainer
+        )}
+    </div>
   );
 }
 
+/* ────────────────────────────────────────────────────────────── */
+/*  Inline comment form (rendered via portal)                     */
+/* ────────────────────────────────────────────────────────────── */
 
+function AddCommentForm({
+  line,
+  filePath,
+  onClose,
+}: {
+  line: number;
+  filePath: string;
+  onClose: () => void;
+}) {
+  const review = useReview();
+  const [body, setBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!body.trim() || !review) return;
+    setSubmitting(true);
+    await review.addInlineComment(filePath, line, body.trim());
+    setBody("");
+    setSubmitting(false);
+    onClose();
+  };
+
+  return (
+    <div className="inline-add-comment-form">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+          <MessageSquare className="h-3 w-3" />
+          Commentaire ligne {line}
+        </span>
+        <button
+          onClick={onClose}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+      <Textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder="Votre commentaire…"
+        rows={3}
+        className="text-sm resize-none mb-2"
+        autoFocus
+      />
+      <div className="flex justify-end gap-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onClose}
+          className="text-xs"
+        >
+          Annuler
+        </Button>
+        <Button
+          size="sm"
+          onClick={handleSubmit}
+          disabled={submitting || !body.trim()}
+          className="text-xs gap-1"
+        >
+          <Send className="h-3 w-3" />
+          Envoyer
+        </Button>
+      </div>
+    </div>
+  );
+}

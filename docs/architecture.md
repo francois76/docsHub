@@ -91,14 +91,18 @@ sequenceDiagram
 ```mermaid
 graph TD
     LP["layout.tsx\n(root layout)"] --> AP["AuthProvider"]
-    AP --> TB["TopBar\n(repo + branch selectors, sync,\nbarre de progression, modal erreur)"]
-    AP --> DS["DocsSidebar\n(file tree)"]
-    AP --> CP["[...path]/page.tsx\n(page principale)"]
+    AP --> BL["[branch]/layout.tsx"]
+    BL --> TB["TopBar\n(repo + branch selectors, sync,\nbarre de progression, modal erreur)"]
+    BL --> DS["DocsSidebar\n(file tree)"]
+    BL --> RP["ReviewProvider\n(contexte React — état revue)"]
 
-    CP --> MV["MarkdownViewer\n(dangerouslySetInnerHTML)"]
-    CP --> RP["ReviewPanel\n(affiché si PR ouverte)"]
+    RP --> MAIN["main (zone de contenu)"]
+    RP --> RB["ReviewBar\n(barre de revue en bas)"]
 
-    MV --> MMD["MermaidDiagram\n(client component)"]
+    MAIN --> CP["[...path]/page.tsx\n(page principale)"]
+    CP --> MV["MarkdownViewer\n(dangerouslySetInnerHTML\n+ annotations inline)"]
+    MV --> MMD["Mermaid\n(client-side rendering)"]
+    MV --> IC["Commentaires inline\n(DOM manipulation + portals)"]
 
     TB -->|GET /api/repos| API1["API: liste des repos"]
     TB -->|"GET /api/repos/{repo}/branches"| API2["API: branches"]
@@ -111,7 +115,13 @@ graph TD
 
 ## Gestion de l'authentification
 
-docsHub supporte deux modes d'authentification, configurables par dépôt dans `.docshub.yml` :
+docsHub supporte deux modes d'authentification, configurables **par dépôt** dans `.docshub.yml`.
+
+L'interface s'adapte automatiquement au mode choisi :
+- **`authMode: token`** → aucun bouton de connexion ; toutes les opérations (clone, revue) utilisent le token de service.
+- **`authMode: oauth`** → la `ReviewBar` affiche un bouton « Se connecter avec GitHub / GitLab » spécifique au type du dépôt sélectionné. La page de connexion filtre aussi les providers par projet.
+
+Les providers OAuth ne sont enregistrés dans NextAuth que si les variables `*_CLIENT_ID` et `*_CLIENT_SECRET` sont renseignées.
 
 ```mermaid
 flowchart LR
@@ -165,18 +175,26 @@ Le pipeline de rendu fonctionne en deux phases :
 sequenceDiagram
     participant Server as Serveur (markdown.ts)
     participant Client as Client (MarkdownViewer)
-    participant Mermaid as MermaidDiagram
+    participant Mermaid as Mermaid (client-side)
+    participant Review as Review (inline)
 
     Server->>Server: markdown-it.render(raw)
-    Note over Server: Les blocs mermaid sont convertis en div.mermaid
+    Note over Server: Plugin source_lines :<br/>ajoute data-source-line-start/end<br/>sur chaque bloc
+    Note over Server: Les blocs mermaid → div.mermaid-raw
     Server->>Server: Shiki colore les autres blocs de code
-    Server-->>Client: HTML complet
+    Server-->>Client: HTML complet (avec attributs de ligne)
 
     Client->>Client: dangerouslySetInnerHTML
-    Client->>Client: Détecte .mermaid dans le DOM
-    Client->>Mermaid: createPortal(<MermaidDiagram code=… />)
-    Mermaid->>Mermaid: mermaid.render(code)
+    Client->>Client: Détecte .mermaid-raw dans le DOM
+    Client->>Mermaid: import("mermaid") + render
     Mermaid-->>Client: SVG injecté
+
+    alt PR ouverte
+        Client->>Review: Scan [data-source-line-start] (enfants directs)
+        Review->>Review: Ajoute boutons "+" dans le gutter
+        Review->>Review: Insère commentaires inline (DOM)
+        Note over Review: Le formulaire de commentaire<br/>est un React portal
+    end
 ```
 
 ---

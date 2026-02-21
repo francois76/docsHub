@@ -36,8 +36,9 @@ export class GitHubReviewProvider implements ReviewProvider {
   }
 
   async findPR(repo: string, headBranch: string): Promise<PullRequest | null> {
+    const owner = repo.split('/')[0];
     const prs = await this.request<any[]>(
-      `/repos/${repo}/pulls?state=open&head=${headBranch}&per_page=5`
+      `/repos/${repo}/pulls?state=open&head=${encodeURIComponent(`${owner}:${headBranch}`)}&per_page=5`
     );
     if (!prs.length) return null;
     const pr = prs[0];
@@ -161,5 +162,30 @@ export class GitHubReviewProvider implements ReviewProvider {
         })),
       }),
     });
+  }
+
+  async createPR(
+    repo: string,
+    headBranch: string,
+    baseBranch: string,
+    title?: string
+  ): Promise<PullRequest> {
+    const pr = await this.request<any>(`/repos/${repo}/pulls`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: title ?? `Documentation review: ${headBranch}`,
+        head: headBranch,
+        base: baseBranch,
+      }),
+    });
+    return {
+      id: pr.id,
+      number: pr.number,
+      title: pr.title,
+      state: pr.state,
+      head: pr.head.ref,
+      base: pr.base.ref,
+      url: pr.html_url,
+    };
   }
 }

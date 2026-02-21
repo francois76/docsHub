@@ -69,6 +69,38 @@ async function getMarkdown(_repoName: string, _branch: string): Promise<Markdown
     },
   });
 
+  // ── Plugin: annotate block-level opening tags with source line info ──
+  // This enables the client-side review overlay to map rendered blocks back to
+  // source line ranges, so inline comments can be placed at the right location.
+  instance.core.ruler.push("source_lines", (state) => {
+    for (const token of state.tokens) {
+      if (token.map) {
+        // nesting === 1 → opening tag  (p, h1, ul, ol, blockquote, table…)
+        // nesting === 0 → self-closing  (hr, code_block)
+        if (token.nesting >= 0) {
+          token.attrSet(
+            "data-source-line-start",
+            String(token.map[0] + 1)
+          ); // 1-based
+          token.attrSet("data-source-line-end", String(token.map[1]));
+        }
+      }
+    }
+  });
+
+  // ── Wrap fence output with source-line div ──
+  // Fence tokens use a custom renderer, so the core ruler attributes don't end
+  // up in the output (the fence rule builds its own HTML). We wrap the result.
+  const originalFence = instance.renderer.rules.fence!;
+  instance.renderer.rules.fence = (tokens, idx, options, env, self) => {
+    const token = tokens[idx];
+    const html = originalFence(tokens, idx, options, env, self);
+    if (token.map) {
+      return `<div data-source-line-start="${token.map[0] + 1}" data-source-line-end="${token.map[1]}">${html}</div>\n`;
+    }
+    return html;
+  };
+
   // Override image rendering to use the assets API
   const defaultImageRenderer = instance.renderer.rules.image;
   instance.renderer.rules.image = (tokens: Token[], idx: number, options: MarkdownIt["options"], env: unknown, self: Renderer) => {

@@ -166,4 +166,32 @@ export class GitLabReviewProvider implements ReviewProvider {
       await this.addComment(repo, prNumber, payload.body);
     }
   }
+
+  async createPR(
+    repo: string,
+    headBranch: string,
+    baseBranch: string,
+    title?: string
+  ): Promise<PullRequest> {
+    const mr = await this.request<any>(
+      `/projects/${this.encodeRepo(repo)}/merge_requests`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          title: title ?? `Documentation review: ${headBranch}`,
+          source_branch: headBranch,
+          target_branch: baseBranch,
+        }),
+      }
+    );
+    return {
+      id: mr.id,
+      number: mr.iid,
+      title: mr.title,
+      state: mr.state === "opened" ? "open" : mr.state,
+      head: mr.source_branch,
+      base: mr.target_branch,
+      url: mr.web_url,
+    };
+  }
 }

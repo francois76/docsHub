@@ -331,4 +331,53 @@ export class BitbucketReviewProvider implements ReviewProvider {
       await this.addComment(repo, prNumber, payload.body);
     }
   }
+
+  async createPR(
+    repo: string,
+    headBranch: string,
+    baseBranch: string,
+    title?: string
+  ): Promise<PullRequest> {
+    const prefix = this.repoPrefix(repo);
+    const prTitle = title ?? `Documentation review: ${headBranch}`;
+
+    if (this.variant === "server") {
+      const pr = await this.request<any>(`${prefix}/pull-requests`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: prTitle,
+          fromRef: { id: `refs/heads/${headBranch}` },
+          toRef: { id: `refs/heads/${baseBranch}` },
+        }),
+      });
+      return {
+        id: pr.id,
+        number: pr.id,
+        title: pr.title,
+        state: "open",
+        head: headBranch,
+        base: baseBranch,
+        url: pr.links?.self?.[0]?.href ?? "",
+      };
+    }
+
+    // Cloud
+    const pr = await this.request<any>(`${prefix}/pullrequests`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: prTitle,
+        source: { branch: { name: headBranch } },
+        destination: { branch: { name: baseBranch } },
+      }),
+    });
+    return {
+      id: pr.id,
+      number: pr.id,
+      title: pr.title,
+      state: "open",
+      head: headBranch,
+      base: baseBranch,
+      url: pr.links?.html?.href ?? "",
+    };
+  }
 }
