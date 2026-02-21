@@ -9,6 +9,16 @@ repos:
     docsDir: docs
     defaultBranch: main
 
+  # docsHub itself — documentation du projet, servi depuis GitHub
+  - name: docshub
+    type: github
+    url: https://github.com/francois76/docsHub.git
+    docsDir: docs
+    defaultBranch: main
+    authMode: token
+    # token: ghp_your_token_here  # Décommentez et renseignez pour les revues de PR
+    #                               Pour la lecture seule d'un repo public, non nécessaire
+
   # Uncomment and fill in to add a GitHub repository:
   # - name: my-github-project
   #   type: github
