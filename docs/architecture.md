@@ -193,10 +193,11 @@ sequenceDiagram
 
     alt PR ouverte
         Client->>Review: Scan [data-source-line-start] (enfants directs)
-        Review->>Review: Ajoute boutons "+" dans le gutter (type=button, data-line=X)
-        Review->>Review: Insère commentaires inline (DOM)
-        Note over Review: Le formulaire de commentaire<br/>est un React portal<br/>Fermeture : Échap, Annuler ou clic sur "+"
-        Note over Review: Quand un form est ouvert :<br/>tous les "+" restent visibles (CSS class)<br/>le bouton actif est mis en évidence
+        Review->>Review: Un seul bouton "+" par bloc (prepend, position absolute left:-2rem)
+        Note over Review: Blocs sans table/code (data-fine-grained absent) :<br/>bouton visible via CSS au hover du bloc entier<br/>Tableaux/code (data-fine-grained=true) :<br/>JS mouseover repositionne le bouton sur la ligne survolée<br/>et ajoute .review-line-plus--row-hover → un seul bouton visible
+        Review->>Review: Commentaires insérés AVANT le bloc (.inline-comments-group--collapsed)
+        Review->>Review: Clic "+" → toggle collapsed + ouvre formulaire AVANT le bloc (portal React)
+        Note over Review: Contournement API GitHub :<br/>fallback = issue comment avec<br/><!-- docshub:path=… --> + <!-- docshub:line=N -->.<br/>listComments() extrait les marqueurs depuis<br/>les issue comments pour rétablir path + line.<br/>(visible immédiatement et sur F5)
     end
 ```
 

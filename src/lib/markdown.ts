@@ -6,6 +6,12 @@ import { createHighlighter } from "shiki";
 let markdownInstance: MarkdownIt | null = null;
 let highlighterReady = false;
 
+/** Call this when renderer rules change (e.g. hot reload in dev). */
+export function resetMarkdownInstance() {
+  markdownInstance = null;
+  highlighterReady = false;
+}
+
 async function getMarkdown(_repoName: string, _branch: string): Promise<MarkdownIt> {
   if (markdownInstance && highlighterReady) return markdownInstance;
 
@@ -100,6 +106,25 @@ async function getMarkdown(_repoName: string, _branch: string): Promise<Markdown
     }
     return html;
   };
+
+  // ── Wrap table output with source-line div ──
+  // The source_lines plugin adds data-source-line-* to the <table> token, but
+  // prepending a <button> inside <table> is invalid HTML (browsers eject it).
+  // We move those attrs onto a wrapper <div> instead, just like fences above.
+  instance.renderer.rules.table_open = (tokens, idx, _options, _env, self) => {
+    const token = tokens[idx];
+    const lineStart = token.attrGet("data-source-line-start");
+    const lineEnd = token.attrGet("data-source-line-end");
+    // Remove source-line attrs from <table>.
+    token.attrs = (token.attrs ?? []).filter(
+      ([k]) => k !== "data-source-line-start" && k !== "data-source-line-end"
+    );
+    const wrapAttrs = lineStart
+      ? ` data-source-line-start="${lineStart}" data-source-line-end="${lineEnd}"`
+      : "";
+    return `<div class="table-wrapper"${wrapAttrs}>\n<table${self.renderAttrs(token)}>\n`;
+  };
+  instance.renderer.rules.table_close = () => `</table>\n</div>\n`;
 
   // Override image rendering to use the assets API
   const defaultImageRenderer = instance.renderer.rules.image;

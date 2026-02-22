@@ -264,14 +264,17 @@
   padding-left: 2.5rem;
 }
 
+/* Any element that hosts a gutter "+" button */
 .review-annotated-block {
   position: relative;
 }
 
+/* ── Gutter button base ──────────────────────────────────────── */
 .review-line-plus {
   position: absolute;
   left: -2rem;
-  top: 0.125rem;
+  top: 50%;
+  transform: translateY(-50%);
   width: 1.375rem;
   height: 1.375rem;
   border-radius: 50%;
@@ -281,7 +284,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
@@ -289,20 +292,25 @@
   z-index: 5;
 }
 
-.review-annotated-block:hover .review-line-plus {
+/* ── Show button on hover ───────────────────────────────────── */
+/* Plain blocks (no fine-grained rows): CSS hover on the block */
+.review-annotated-block:not([data-fine-grained]):hover > .review-line-plus:not(.review-line-plus--has-comments),
+/* Fine-grained (table rows / code lines): JS adds this class on row hover */
+.review-line-plus--row-hover {
   color: hsl(var(--primary));
   border-color: hsl(var(--primary));
   background: hsl(var(--primary) / 0.08);
 }
 
-/* When any inline form is open, keep ALL "+" buttons faintly visible
-   so the user knows they can switch to a different line */
-.review-has-active-comment .review-line-plus {
-  color: hsl(var(--primary) / 0.35);
-  border-color: hsl(var(--primary) / 0.35);
+/* "has-comments" badge: always visible, vivid accent colour */
+.review-line-plus--has-comments {
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.15);
+  font-weight: 700;
 }
 
-/* The specific "+" button whose form is currently open */
+/* The specific "+" whose form is open */
 .review-line-plus--active {
   color: hsl(var(--primary)) !important;
   border-color: hsl(var(--primary)) !important;
@@ -314,9 +322,38 @@
   color: white !important;
 }
 
-/* Inline comment cards (rendered via DOM manipulation) */
+.review-line-count {
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ── Comment thread panel (absolute overlay above the block) ─── */
 .inline-comments-group {
-  margin: 0.5rem 0 1rem;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  margin-bottom: 4px;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  padding: 0.375rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* Fine-grained panels: top is set inline via JS; translateY pulls
+   the panel bottom flush with the referenced row's top edge. */
+.inline-comments-group--fg {
+  bottom: unset;
+  transform: translateY(-100%);
+  margin-bottom: 0;
+  margin-top: -4px;
+}
+
+.inline-comments-group--collapsed {
+  display: none;
 }
 
 .inline-comment-card {
@@ -325,13 +362,12 @@
   border-radius: 0.375rem;
   padding: 0.5rem 0.75rem;
   margin-bottom: 0.375rem;
-  border-left: 3px solid hsl(var(--muted-foreground) / 0.3);
   font-size: 0.75rem;
   line-height: 1.5;
 }
 
 .inline-comment-card.own {
-  border-left-color: hsl(var(--primary));
+  border-left: 3px solid hsl(var(--primary));
   background: hsl(var(--primary) / 0.04);
 }
 
@@ -366,17 +402,46 @@
   white-space: pre-wrap;
 }
 
-/* Comment form (rendered via React portal) */
+.inline-comment-footer {
+  padding-top: 0.375rem;
+  border-top: 1px solid hsl(var(--border));
+  margin-top: 0.125rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.inline-comment-add-btn {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: hsl(var(--primary));
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  transition: background 0.15s;
+}
+
+.inline-comment-add-btn:hover {
+  background: hsl(var(--primary) / 0.1);
+}
+
+/* ── Add-comment form (React portal, absolute overlay) ──────── */
 .inline-add-comment-container {
-  margin: 0.5rem 0 1rem;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  z-index: 60;
+  margin-bottom: 4px;
 }
 
 .inline-add-comment-form {
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--primary) / 0.3);
+  border: 1px solid hsl(var(--primary) / 0.4);
   border-radius: 0.5rem;
   padding: 0.75rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 /* Scrollbar styles */

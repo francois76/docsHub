@@ -59,15 +59,32 @@ export class GitHubReviewProvider implements ReviewProvider {
       this.request<any[]>(`/repos/${repo}/pulls/${prNumber}/comments?per_page=100`),
     ]);
 
-    const toComment = (c: any, inline = false): ReviewComment => ({
-      id: c.id,
-      author: c.user?.login ?? "unknown",
-      body: c.body,
-      createdAt: c.created_at,
-      path: inline ? c.path : undefined,
-      line: inline ? c.line ?? c.original_line : undefined,
-      isOwn: this.userName ? c.user?.login === this.userName : false,
-    });
+    const toComment = (c: any, inline = false): ReviewComment => {
+      const rawBody: string = c.body ?? "";
+      // Parse hidden markers embedded in fallback issue comments.
+      const lineMatch = rawBody.match(/\n?<!-- docshub:line=(\d+) -->/);
+      const pathMatch = rawBody.match(/\n?<!-- docshub:path=([^\s>]+) -->/);
+      const docshubLine = lineMatch ? parseInt(lineMatch[1]) : undefined;
+      const docshubPath = pathMatch ? pathMatch[1] : undefined;
+      // Strip markers so they never appear as visible text in docsHub.
+      const body = rawBody
+        .replace(/\n?<!-- docshub:line=\d+ -->/, "")
+        .replace(/\n?<!-- docshub:path=[^\s>]+ -->/, "")
+        .trimEnd();
+      // Issue comment with embedded markers acts as an inline comment.
+      const isEmbedded = !inline && !!docshubLine && !!docshubPath;
+      return {
+        id: c.id,
+        author: c.user?.login ?? "unknown",
+        body,
+        createdAt: c.created_at,
+        path: inline ? c.path : (isEmbedded ? docshubPath : undefined),
+        line: inline
+          ? (c.line ?? c.original_line ?? docshubLine)
+          : (isEmbedded ? docshubLine : undefined),
+        isOwn: this.userName ? c.user?.login === this.userName : false,
+      };
+    };
 
     return [
       ...issueComments.map((c) => toComment(c, false)),
@@ -114,34 +131,47 @@ export class GitHubReviewProvider implements ReviewProvider {
       .replace(/^(https:\/\/api\.github\.com)\/?$/, "$1/graphql");
 
     // Try line-level comment first (works if the line is in a diff hunk).
-    // If that returns thread:null, retry as file-level comment.
-    // Note: GitHub's public APIs (REST & GraphQL) can only target lines
-    // within diff hunks. The web UI uses an internal API for arbitrary lines.
     const node = await this.graphqlCreateThread(graphqlUrl, prData.node_id, {
       body: displayBody,
       path: filePath,
       line,
       side: "RIGHT",
       subjectType: "LINE",
-    }) ?? await this.graphqlCreateThread(graphqlUrl, prData.node_id, {
-      body: `${displayBody}\n\n> 📄 \`${filePath}\` — ligne ${line}`,
-      path: filePath,
-      subjectType: "FILE",
     });
 
-    if (!node) {
-      throw new Error(
-        `Impossible de commenter sur ${filePath}:${line} — le fichier n'est probablement pas dans le diff de la PR.`
-      );
+    if (node) {
+      return {
+        id: node.databaseId,
+        author: node.author?.login ?? "unknown",
+        body: node.body,
+        createdAt: node.createdAt,
+        path: node.path ?? filePath,
+        line: node.line ?? line,
+        isOwn: true,
+      };
     }
 
+    // Fallback: post as a regular issue comment with embedded markers.
+    // GraphQL FILE-level threads are pending until a review is submitted,
+    // so they are not reliably returned by the REST comments endpoint on refresh.
+    // An issue comment is always immediately visible.
+    const fallbackBody =
+      `${displayBody}\n\n` +
+      `> 📄 \`${filePath}\` — ligne ${line}\n` +
+      `<!-- docshub:path=${filePath} -->\n` +
+      `<!-- docshub:line=${line} -->`;
+    const ic = await this.request<any>(
+      `/repos/${repo}/issues/${prNumber}/comments`,
+      { method: "POST", body: JSON.stringify({ body: fallbackBody }) }
+    );
     return {
-      id: node.databaseId,
-      author: node.author?.login ?? "unknown",
-      body: node.body,
-      createdAt: node.createdAt,
-      path: node.path ?? filePath,
-      line: node.line ?? line,
+      id: ic.id,
+      author: ic.user?.login ?? "unknown",
+      // Return clean body (without markers) to the caller.
+      body: displayBody,
+      createdAt: ic.created_at,
+      path: filePath,
+      line,
       isOwn: true,
     };
   }

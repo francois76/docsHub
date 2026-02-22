@@ -67,9 +67,9 @@ export function MarkdownViewer({ html, filePath }: Props) {
 
   /* state for inline comment form */
   const [addingAtLine, setAddingAtLine] = useState<number | null>(null);
-  const [formContainer, setFormContainer] = useState<HTMLDivElement | null>(
-    null
-  );
+  const [formContainer, setFormContainer] = useState<HTMLDivElement | null>(null);
+  /* ref to the currently-open comment panel so Cancel can close it */
+  const activePanelRef = useRef<HTMLDivElement | null>(null);
 
   /* reset form when file changes */
   useEffect(() => {
@@ -195,37 +195,32 @@ export function MarkdownViewer({ html, filePath }: Props) {
     );
 
     directBlocks.forEach((block) => {
-      const lineStart = parseInt(
-        block.getAttribute("data-source-line-start")!
-      );
+      const lineStart = parseInt(block.getAttribute("data-source-line-start")!);
       const lineEnd = parseInt(block.getAttribute("data-source-line-end")!);
 
       block.classList.add("review-annotated-block");
 
-      /* "+" button in left gutter */
-      const plusBtn = document.createElement("button");
-      plusBtn.type = "button";
-      plusBtn.className = "review-line-plus";
-      plusBtn.dataset.line = String(lineStart);
-      plusBtn.textContent = "+";
-      plusBtn.title = `Commenter ligne ${lineStart}`;
-      plusBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setAddingAtLine((prev) => (prev === lineStart ? null : lineStart));
-      });
-      block.prepend(plusBtn);
-      cleanups.push(() => plusBtn.remove());
+      /* ── Detect fine-grained sub-items ────────────────────── */
+      const tableRows = Array.from(block.querySelectorAll<HTMLElement>("tr"));
+      const codeLineSpans = Array.from(
+        block.querySelectorAll<HTMLElement>("span.line")
+      ).filter((s) => s.childNodes.length > 0);
+      const subElements: HTMLElement[] = tableRows.length > 0 ? tableRows : codeLineSpans;
+      const hasFineGrained = subElements.length > 0;
 
-      /* Inline comments attached to this block's line range */
+      /* ── Existing comments for this block ─────────────────── */
       const blockComments = fileComments.filter(
-        (c) =>
-          c.line !== undefined && c.line >= lineStart && c.line <= lineEnd
+        (c) => c.line !== undefined && c.line >= lineStart && c.line <= lineEnd
       );
 
-      if (blockComments.length > 0) {
-        const commentsDiv = document.createElement("div");
-        commentsDiv.className = "inline-comments-group";
+      /* ── Comment panel (inside block, absolutely positioned) ─ */
+      // For PLAIN blocks: one shared panel anchored to block top (bottom:100% CSS).
+      // For FINE-GRAINED blocks: one panel per sub-element, top set via rAF.
+      let sharedPanel: HTMLDivElement | null = null;
+      if (blockComments.length > 0 && !hasFineGrained) {
+        sharedPanel = document.createElement("div");
+        sharedPanel.className =
+          "inline-comments-group inline-comments-group--collapsed";
         blockComments.forEach((c) => {
           const card = document.createElement("div");
           card.className = `inline-comment-card${c.isOwn ? " own" : ""}`;
@@ -237,10 +232,163 @@ export function MarkdownViewer({ html, filePath }: Props) {
             </div>
             <div class="inline-comment-body">${escapeHtml(c.body)}</div>
           `;
-          commentsDiv.appendChild(card);
+          sharedPanel!.appendChild(card);
         });
-        block.after(commentsDiv);
-        cleanups.push(() => commentsDiv.remove());
+        // Footer to allow adding a comment on a line that already has some.
+        {
+          const footer = document.createElement("div");
+          footer.className = "inline-comment-footer";
+          const addBtn = document.createElement("button");
+          addBtn.type = "button";
+          addBtn.className = "inline-comment-add-btn";
+          addBtn.textContent = "+ Commenter";
+          addBtn.addEventListener("click", () => {
+            sharedPanel!.classList.add("inline-comments-group--collapsed");
+            activePanelRef.current = null;
+            setAddingAtLine(lineStart);
+          });
+          footer.appendChild(addBtn);
+          sharedPanel!.appendChild(footer);
+        }
+        block.appendChild(sharedPanel); // inside, positioned absolutely
+        cleanups.push(() => sharedPanel?.remove());
+      }
+
+      /* ── Build one gutter button (+ or count badge) ────────── */
+      // ownPanel: the comment panel this specific button controls.
+      const makeBtn = (
+        targetLine: number,
+        ownPanel: HTMLDivElement | null
+      ): HTMLButtonElement => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "review-line-plus";
+        btn.dataset.line = String(targetLine);
+        const count = fileComments.filter((c) => c.line === targetLine).length;
+        if (count > 0) {
+          btn.classList.add("review-line-plus--has-comments");
+          btn.innerHTML = `<span class="review-line-count">${count}</span>`;
+          btn.title = `${count} commentaire(s) — cliquer pour afficher/masquer`;
+        } else {
+          btn.textContent = "+";
+          btn.title = `Commenter ligne ${targetLine}`;
+        }
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const line = parseInt(btn.dataset.line!);
+          if (ownPanel) {
+            // Badge button: close any open form first, then toggle panel.
+            setAddingAtLine(null);
+            ownPanel.classList.toggle("inline-comments-group--collapsed");
+            activePanelRef.current = ownPanel.classList.contains(
+              "inline-comments-group--collapsed"
+            )
+              ? null
+              : ownPanel;
+          } else {
+            // Plain "+" (no comments): close any open panel, then open form.
+            if (activePanelRef.current) {
+              activePanelRef.current.classList.add(
+                "inline-comments-group--collapsed"
+              );
+              activePanelRef.current = null;
+            }
+            setAddingAtLine((prev) => (prev === line ? null : line));
+          }
+        });
+        return btn;
+      };
+
+      if (!hasFineGrained) {
+        /* ── Plain block: single button, CSS hover on block ──── */
+        const btn = makeBtn(lineStart, sharedPanel);
+        block.prepend(btn);
+        cleanups.push(() => btn.remove());
+      } else {
+        /* ── Fine-grained: one button + one panel per sub-element */
+        block.dataset.fineGrained = "true";
+        cleanups.push(() => delete block.dataset.fineGrained);
+
+        const btnMap = new Map<HTMLElement, HTMLButtonElement>();
+        const panelMap = new Map<HTMLElement, HTMLDivElement>();
+
+        subElements.forEach((el, i) => {
+          const lineForEl = Math.min(lineStart + i, lineEnd - 1);
+
+          // Build per-line comment panel (inside block, absolutely positioned).
+          const lineComments = fileComments.filter((c) => c.line === lineForEl);
+          let linePanel: HTMLDivElement | null = null;
+          if (lineComments.length > 0) {
+            linePanel = document.createElement("div");
+            linePanel.className =
+              "inline-comments-group inline-comments-group--collapsed inline-comments-group--fg";
+            lineComments.forEach((c) => {
+              const card = document.createElement("div");
+              card.className = `inline-comment-card${c.isOwn ? " own" : ""}`;
+              card.innerHTML = `
+                <div class="inline-comment-header">
+                  <span class="inline-comment-author">${escapeHtml(c.author)}</span>
+                  ${c.line ? `<span class="inline-comment-line">L${c.line}</span>` : ""}
+                  <span class="inline-comment-time">${new Date(c.createdAt).toLocaleString()}</span>
+                </div>
+                <div class="inline-comment-body">${escapeHtml(c.body)}</div>
+              `;
+              linePanel!.appendChild(card);
+            });
+            // Footer to allow adding another comment on this specific line.
+            {
+              const thisLine = lineForEl;
+              const thisPanel = linePanel!;
+              const footer = document.createElement("div");
+              footer.className = "inline-comment-footer";
+              const addBtn = document.createElement("button");
+              addBtn.type = "button";
+              addBtn.className = "inline-comment-add-btn";
+              addBtn.textContent = "+ Commenter";
+              addBtn.addEventListener("click", () => {
+                thisPanel.classList.add("inline-comments-group--collapsed");
+                activePanelRef.current = null;
+                setAddingAtLine(thisLine);
+              });
+              footer.appendChild(addBtn);
+              linePanel!.appendChild(footer);
+            }
+            block.appendChild(linePanel); // inside block, top set in rAF
+            cleanups.push(() => linePanel?.remove());
+          }
+
+          const btn = makeBtn(lineForEl, linePanel);
+          btn.style.visibility = "hidden";
+          block.appendChild(btn);
+          btnMap.set(el, btn);
+          if (linePanel) panelMap.set(el, linePanel);
+          cleanups.push(() => btn.remove());
+        });
+
+        const rafId = requestAnimationFrame(() => {
+          for (const [el, btn] of btnMap) {
+            const midY = el.offsetTop + el.offsetHeight / 2;
+            btn.style.top = `${midY - 11}px`;
+            btn.style.visibility = "";
+          }
+          // Position each per-line panel just above its row.
+          for (const [el, panel] of panelMap) {
+            panel.style.top = `${el.offsetTop}px`;
+          }
+        });
+        cleanups.push(() => cancelAnimationFrame(rafId));
+
+        for (const [el, btn] of btnMap) {
+          const onEnter = () => btn.classList.add("review-line-plus--row-hover");
+          const onLeave = () => btn.classList.remove("review-line-plus--row-hover");
+          el.addEventListener("mouseenter", onEnter);
+          el.addEventListener("mouseleave", onLeave);
+          cleanups.push(() => {
+            el.removeEventListener("mouseenter", onEnter);
+            el.removeEventListener("mouseleave", onLeave);
+          });
+        }
       }
     });
 
@@ -264,54 +412,53 @@ export function MarkdownViewer({ html, filePath }: Props) {
     );
 
     for (const block of directBlocks) {
-      const lineStart = parseInt(
-        block.getAttribute("data-source-line-start")!
-      );
-      if (lineStart === addingAtLine) {
-        const formDiv = document.createElement("div");
-        formDiv.className = "inline-add-comment-container";
+      const lineStart = parseInt(block.getAttribute("data-source-line-start")!);
+      const lineEnd   = parseInt(block.getAttribute("data-source-line-end")!);
 
-        /* Insert after the block (and after any existing comment group) */
-        let insertAfter: Element = block;
-        while (
-          insertAfter.nextElementSibling?.classList.contains(
-            "inline-comments-group"
-          )
-        ) {
-          insertAfter = insertAfter.nextElementSibling;
+      if (!(lineStart <= addingAtLine && addingAtLine <= lineEnd)) continue;
+
+      const formDiv = document.createElement("div");
+      // Always append inside the block so it never affects document flow.
+      formDiv.className = "inline-add-comment-container";
+      block.appendChild(formDiv);
+
+      if (block.dataset.fineGrained) {
+        // Position the form above the specific sub-row that was clicked.
+        const tableRows = Array.from(block.querySelectorAll<HTMLElement>("tr"));
+        const codeLines = Array.from(
+          block.querySelectorAll<HTMLElement>("span.line")
+        ).filter((s) => s.childNodes.length > 0);
+        const subEls = tableRows.length > 0 ? tableRows : codeLines;
+        const idx = addingAtLine - lineStart;
+        const el = subEls[Math.max(0, Math.min(idx, subEls.length - 1))];
+        if (el) {
+          formDiv.style.top = `${el.offsetTop}px`;
+          formDiv.style.transform = "translateY(-100%)";
         }
-        insertAfter.after(formDiv);
-        setFormContainer(formDiv);
-
-        return () => {
-          formDiv.remove();
-          setFormContainer(null);
-        };
       }
+      // Plain blocks use CSS: bottom:100% (set via .inline-add-comment-container).
+
+      setFormContainer(formDiv);
+      return () => {
+        formDiv.remove();
+        setFormContainer(null);
+      };
     }
   }, [addingAtLine, html]);
 
   /* ──────────────────────────────────────────────────────────── */
-  /*  Active-line highlight & "+" visibility when form is open   */
+  /*  Active-line highlight when form is open                     */
   /* ──────────────────────────────────────────────────────────── */
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    /* Remove any previous active marker */
     container
       .querySelectorAll<HTMLElement>(".review-line-plus--active")
       .forEach((el) => el.classList.remove("review-line-plus--active"));
 
-    if (addingAtLine === null) {
-      container.classList.remove("review-has-active-comment");
-      return;
-    }
+    if (addingAtLine === null) return;
 
-    /* Make all "+" buttons faintly visible while form is open */
-    container.classList.add("review-has-active-comment");
-
-    /* Highlight the specific button for the active line */
     const activeBtn = container.querySelector<HTMLElement>(
       `.review-line-plus[data-line="${addingAtLine}"]`
     );
@@ -331,7 +478,13 @@ export function MarkdownViewer({ html, filePath }: Props) {
           <AddCommentForm
             line={addingAtLine}
             filePath={filePath}
-            onClose={() => setAddingAtLine(null)}
+            onClose={() => {
+              activePanelRef.current?.classList.add(
+                "inline-comments-group--collapsed"
+              );
+              activePanelRef.current = null;
+              setAddingAtLine(null);
+            }}
           />,
           formContainer
         )}
