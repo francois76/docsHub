@@ -318,6 +318,13 @@ Poste une action de revue sur une PR (commentaire global, commentaire inline, ap
 | `400` | Provider de revue non disponible |
 | `500` | Erreur API plateforme |
 
+> **Commentaires inline GitHub**
+>
+> Les commentaires inline utilisent la mutation GraphQL `addPullRequestReviewThread`.
+> Si la ligne ciblée est dans le diff, le commentaire s'affiche directement sur la ligne dans « Files changed ».
+> Si la ligne est hors du diff (limitation des API publiques GitHub — l'UI web utilise une API interne),
+> le commentaire est rattaché au fichier dans « Files changed » avec la référence `📄 fichier:ligne` dans le corps.
+
 ---
 
 ## Auth
