@@ -75,7 +75,8 @@ export class GitLabReviewProvider implements ReviewProvider {
         line: n.position?.new_line,
         isOwn: this.userName ? n.author?.username === this.userName : false,
       }))
-      .sort(
+      // Rule js-tosorted-immutable: use toSorted() to avoid mutating the array
+      .toSorted(
         (a, b) =>
           new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );

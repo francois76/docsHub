@@ -104,7 +104,8 @@ export class GitHubReviewProvider implements ReviewProvider {
     return [
       ...issueComments.map((c) => toComment(c, false)),
       ...reviewComments.map((c) => toComment(c, true)),
-    ].sort(
+    // Rule js-tosorted-immutable: use toSorted() to avoid mutating the array
+    ].toSorted(
       (a, b) =>
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );

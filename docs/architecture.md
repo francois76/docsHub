@@ -203,6 +203,23 @@ sequenceDiagram
 
 ---
 
+## Optimisations de performance (Vercel React Best Practices)
+
+Les règles ci-dessous ont été appliquées sur l'ensemble de la codebase (`vercel-react-best-practices` v1.0.0, février 2026).
+
+| Règle | Fichier(s) | Description |
+|-------|-----------|-------------|
+| **bundle-barrel-imports** | `next.config.js` | `optimizePackageImports: ["lucide-react"]` transforme automatiquement les imports nommés en imports directs à la compilation, évitant le chargement des ~1 500 modules de la lib |
+| **async-defer-await** + **async-api-routes** | `api/repos/[repo]/sync/route.ts` | La `Promise` de config est démarrée avant le `try` et réutilisée dans le `catch` (sans second fetch) ; `repoConfig` n'est plus récupéré inutilement dans le chemin de succès |
+| **rendering-animate-svg-wrapper** | `TopBar.tsx` | La classe `animate-spin` est appliquée sur un `<div>` wrapper plutôt que directement sur le SVG `<RefreshCw>`, permettant l'accélération GPU |
+| **js-hoist-regexp** | `[...path]/page.tsx` | La regex `/\.(md\|mdx\|markdown)$/i` est hoistée au niveau module pour éviter sa recréation à chaque appel |
+| **js-tosorted-immutable** | `git-service.ts`, `github-provider.ts`, `gitlab-provider.ts`, `bitbucket-provider.ts` | Remplacement de `.sort()` (mutation in-place) par `.toSorted()` (immutable), ce qui protège les arrays partagés de mutations silencieuses |
+| **rerender-lazy-state-init** | `DocsSidebar.tsx` → `TreeNode` | `useState(() => activePath ? isAncestorOf(...) : depth === 0)` — l'initializer en forme de fonction évite que la traversée d'arbre s'exécute à chaque re-render de chaque nœud |
+| **advanced-event-handler-refs** | `MarkdownViewer.tsx` → `InlineCommentWidget`, `ConfirmModal` | Handlers `keydown` (touche Escape) stockés dans une `ref` : la souscription est stable, plus de `eslint-disable-next-line`, plus de risque de stale closure |
+| **rendering-conditional-render** | `MarkdownViewer.tsx` | Remplacement du `&&`-chain incluant `filePath` (string pouvant être `""`) par un ternaire explicite `? createPortal(...) : null` |
+
+---
+
 ## Cycle de vie d'un dépôt distant
 
 ```mermaid

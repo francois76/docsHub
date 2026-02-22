@@ -146,7 +146,8 @@ export class BitbucketReviewProvider implements ReviewProvider {
             ? (c.author?.slug ?? c.author?.name) === this.userName
             : false,
         }))
-        .sort(
+        // Rule js-tosorted-immutable: use toSorted() to avoid mutating the array
+        .toSorted(
           (a: ReviewComment, b: ReviewComment) =>
             new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         );
@@ -169,7 +170,8 @@ export class BitbucketReviewProvider implements ReviewProvider {
           ? (c.user?.nickname ?? c.user?.display_name) === this.userName
           : false,
       }))
-      .sort(
+      // Rule js-tosorted-immutable: use toSorted() to avoid mutating the array
+      .toSorted(
         (a: ReviewComment, b: ReviewComment) =>
           new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );

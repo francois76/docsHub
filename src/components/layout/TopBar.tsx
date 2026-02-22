@@ -159,7 +159,10 @@ export function TopBar({ currentRepo, currentBranch, onSync }: Props) {
             disabled={syncing}
             className="gap-1"
           >
-            <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+            {/* Rule rendering-animate-svg-wrapper: animate the wrapper div, not the SVG, for GPU acceleration */}
+            <div className={cn("flex items-center", syncing && "animate-spin")}>
+              <RefreshCw className="h-4 w-4" />
+            </div>
             <span className="hidden sm:inline">{syncing ? "Sync…" : "Sync"}</span>
           </Button>
         </div>

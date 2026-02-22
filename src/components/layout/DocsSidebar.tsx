@@ -107,9 +107,11 @@ function TreeNode({
   depth: number;
 }) {
   const router = useRouter();
+  // Rule rerender-lazy-state-init: wrap the initializer in a function so
+  // isAncestorOf() (a tree traversal) runs only on the first render, not
+  // on every subsequent re-render.
   const [open, setOpen] = useState(
-    // Auto-expand if a child is active
-    activePath ? isAncestorOf(node, activePath) : depth === 0
+    () => activePath ? isAncestorOf(node, activePath) : depth === 0
   );
 
   const isActive = node.path === activePath;

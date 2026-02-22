@@ -342,17 +342,18 @@ export function MarkdownViewer({ html, filePath }: Props) {
   return (
     <div className={isReviewMode ? "review-mode" : undefined}>
       <MarkdownContent html={html} innerRef={containerRef} />
-      {portalContainer &&
-        activeLine !== null &&
-        filePath &&
-        createPortal(
-          <InlineCommentWidget
-            line={activeLine.line}
-            filePath={filePath}
-            onClose={() => setActiveLine(null)}
-          />,
-          portalContainer
-        )}
+      {/* Rule rendering-conditional-render: use explicit ternary to avoid
+          rendering falsy strings when filePath is "" or portalContainer is null */}
+      {portalContainer !== null && activeLine !== null && filePath != null
+        ? createPortal(
+            <InlineCommentWidget
+              line={activeLine.line}
+              filePath={filePath}
+              onClose={() => setActiveLine(null)}
+            />,
+            portalContainer
+          )
+        : null}
     </div>
   );
 }
@@ -381,18 +382,21 @@ function InlineCommentWidget({
     review?.comments.filter((c) => c.path === filePath && c.line === line) ??
     [];
 
-  /* Close on Escape */
+  // Rule advanced-event-handler-refs: store the callback in a ref so the
+  // effect never needs to re-subscribe when onClose identity changes.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
       }
     };
     document.addEventListener("keydown", handle);
     return () => document.removeEventListener("keydown", handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // stable subscription — no dep on onClose
 
   const handleSubmit = async () => {
     if (!body.trim() || !review) return;
@@ -513,18 +517,21 @@ function ConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  /* Close on Escape */
+  // Rule advanced-event-handler-refs: store the callback in a ref so the
+  // effect never needs to re-subscribe when onCancel identity changes.
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
+
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onCancel();
+        onCancelRef.current();
       }
     };
     document.addEventListener("keydown", handle);
     return () => document.removeEventListener("keydown", handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // stable subscription — no dep on onCancel
 
   return createPortal(
     <div

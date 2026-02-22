@@ -4,6 +4,9 @@ import { renderMarkdown } from "@/lib/markdown";
 import { MarkdownViewer } from "@/components/docs/MarkdownViewer";
 import { FileText } from "lucide-react";
 
+// Rule js-hoist-regexp: hoist static RegExp outside the function to avoid recreating it on every call
+const MARKDOWN_FILE_RE = /\.(md|mdx|markdown)$/i;
+
 interface Props {
   params: Promise<{ repo: string; branch: string; path: string[] }>;
 }
@@ -29,7 +32,7 @@ export default async function DocFilePage({ params }: Props) {
     notFound();
   }
 
-  const isMarkdown = /\.(md|mdx|markdown)$/i.test(fileName);
+  const isMarkdown = MARKDOWN_FILE_RE.test(fileName);
 
   if (!isMarkdown) {
     return (

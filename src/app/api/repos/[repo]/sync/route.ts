@@ -29,9 +29,13 @@ export async function POST(
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
 
+  // Rule async-api-routes: start the config promise immediately so it's ready
+  // for both the happy path (getGitService reuses the cached result) and the
+  // error path (no second fetch needed).  Rule async-defer-await: only await
+  // config in the branch that actually needs it (the catch block).
+  const configPromise = getConfig();
+
   try {
-    const config = await getConfig();
-    const repoConfig = getRepoConfig(repoName, config);
     const service = await getGitService(repoName);
     await service.sync();
     return NextResponse.json({ success: true, message: "Repository synced" });
@@ -40,7 +44,7 @@ export async function POST(
     let repoType = "git";
     let hasToken = false;
     try {
-      const config = await getConfig();
+      const config = await configPromise; // reuse the promise started above — no extra fetch
       const repoConfig = getRepoConfig(repoName, config);
       repoType = repoConfig.type;
       hasToken = !!repoConfig.token;

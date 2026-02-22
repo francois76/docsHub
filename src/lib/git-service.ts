@@ -219,8 +219,9 @@ function buildTree(files: string[], basePath: string): FileTreeNode[] {
 }
 
 function sortTree(nodes: FileTreeNode[]): FileTreeNode[] {
+  // Rule js-tosorted-immutable: use toSorted() to avoid mutating the input array
   return nodes
-    .sort((a, b) => {
+    .toSorted((a, b) => {
       // Directories first
       if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
       return a.name.localeCompare(b.name);
