@@ -328,36 +328,42 @@
   line-height: 1;
 }
 
-/* ── Comment thread panel (absolute overlay above the block) ─── */
-.inline-comments-group {
+/* ── Comment thread panel (absolute overlay ABOVE the block) ─── */
+/* REMOVED — replaced by .inline-comment-widget below */
+
+/* ── Unified inline comment widget ──────────────────────────── */
+/* Positioned below the annotated row (top set inline via JS).   */
+.inline-comment-widget {
   position: absolute;
-  bottom: 100%;
   left: 0;
   right: 0;
   z-index: 50;
-  margin-bottom: 4px;
-  background: hsl(var(--background));
+  /* top is set inline by JS: rowEl.offsetTop + rowEl.offsetHeight */
+  margin-top: 4px;
+}
+
+.inline-comment-widget-inner {
+  background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
   border-radius: 0.5rem;
-  padding: 0.375rem;
+  padding: 0.75rem;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
-/* Fine-grained panels: top is set inline via JS; translateY pulls
-   the panel bottom flush with the referenced row's top edge. */
-.inline-comments-group--fg {
-  bottom: unset;
-  transform: translateY(-100%);
-  margin-bottom: 0;
-  margin-top: -4px;
+.inline-comment-widget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
 }
 
-.inline-comments-group--collapsed {
-  display: none;
+/* ── Individual comment cards ───────────────────────────────── */
+.inline-comment-list {
+  margin-bottom: 0.5rem;
 }
 
 .inline-comment-card {
-  background: hsl(var(--card));
+  background: hsl(var(--background));
   border: 1px solid hsl(var(--border));
   border-radius: 0.375rem;
   padding: 0.5rem 0.75rem;
@@ -380,15 +386,7 @@
 
 .inline-comment-author {
   font-weight: 600;
-}
-
-.inline-comment-line {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.625rem;
-  background: hsl(var(--muted));
-  border-radius: 0.25rem;
-  padding: 0 0.25rem;
-  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
 }
 
 .inline-comment-time {
@@ -400,49 +398,67 @@
 .inline-comment-body {
   color: hsl(var(--muted-foreground));
   white-space: pre-wrap;
+  font-size: 0.75rem;
 }
 
-.inline-comment-footer {
-  padding-top: 0.375rem;
-  border-top: 1px solid hsl(var(--border));
-  margin-top: 0.125rem;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.inline-comment-add-btn {
-  font-size: 0.6875rem;
-  font-weight: 500;
-  color: hsl(var(--primary));
+.inline-comment-delete-btn {
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 0.125rem 0.25rem;
+  color: hsl(var(--muted-foreground));
+  padding: 0.125rem;
   border-radius: 0.25rem;
-  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
 }
 
-.inline-comment-add-btn:hover {
-  background: hsl(var(--primary) / 0.1);
+.inline-comment-delete-btn:hover {
+  color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.08);
 }
 
-/* ── Add-comment form (React portal, absolute overlay) ──────── */
-.inline-add-comment-container {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  z-index: 60;
-  margin-bottom: 4px;
+.inline-comment-divider {
+  border-top: 1px solid hsl(var(--border));
+  margin: 0.5rem 0;
 }
 
-.inline-add-comment-form {
+/* ── Confirmation modal ─────────────────────────────────────── */
+.confirm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirm-modal {
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--primary) / 0.4);
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  min-width: 280px;
+  max-width: 400px;
 }
+
+.confirm-modal-message {
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+  color: hsl(var(--foreground));
+}
+
+.confirm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+
 
 /* Scrollbar styles */
 ::-webkit-scrollbar {

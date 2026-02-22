@@ -380,4 +380,12 @@ export class BitbucketReviewProvider implements ReviewProvider {
       url: pr.links?.html?.href ?? "",
     };
   }
+
+  async deleteComment(
+    _repo: string,
+    _commentId: string | number,
+    _commentType?: string
+  ): Promise<void> {
+    throw new Error("deleteComment not yet implemented for Bitbucket");
+  }
 }

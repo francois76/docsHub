@@ -35,6 +35,20 @@ export class GitHubReviewProvider implements ReviewProvider {
     return res.json() as Promise<T>;
   }
 
+  private async requestDelete(path: string): Promise<void> {
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
+    if (!res.ok && res.status !== 204) {
+      const text = await res.text();
+      throw new Error(`GitHub API error ${res.status}: ${text}`);
+    }
+  }
+
   async findPR(repo: string, headBranch: string): Promise<PullRequest | null> {
     const owner = repo.split('/')[0];
     const prs = await this.request<any[]>(
@@ -83,6 +97,7 @@ export class GitHubReviewProvider implements ReviewProvider {
           ? (c.line ?? c.original_line ?? docshubLine)
           : (isEmbedded ? docshubLine : undefined),
         isOwn: this.userName ? c.user?.login === this.userName : false,
+        commentType: inline ? "review_comment" : "issue_comment",
       };
     };
 
@@ -277,5 +292,22 @@ export class GitHubReviewProvider implements ReviewProvider {
       base: pr.base.ref,
       url: pr.html_url,
     };
+  }
+
+  async deleteComment(
+    repo: string,
+    commentId: string | number,
+    commentType?: string
+  ): Promise<void> {
+    if (commentType === "issue_comment") {
+      await this.requestDelete(`/repos/${repo}/issues/comments/${commentId}`);
+      return;
+    }
+    // Try review comment first; fall back to issue comment if 404/error.
+    try {
+      await this.requestDelete(`/repos/${repo}/pulls/comments/${commentId}`);
+    } catch {
+      await this.requestDelete(`/repos/${repo}/issues/comments/${commentId}`);
+    }
   }
 }

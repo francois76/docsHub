@@ -30,16 +30,25 @@ if (process.env.GITLAB_CLIENT_ID && process.env.GITLAB_CLIENT_SECRET) {
 export const authOptions: NextAuthOptions = {
   providers,
   callbacks: {
-    async jwt({ token, account }) {
+    async jwt({ token, account, profile }) {
       if (account) {
         token.accessToken = account.access_token;
         token.provider = account.provider;
+      }
+      if (profile) {
+        // Store the OAuth username/login (not the display name) so we can
+        // compare it against comment authors to determine isOwn.
+        token.login =
+          (profile as any).login ??      // GitHub
+          (profile as any).username ??   // GitLab
+          token.login;
       }
       return token;
     },
     async session({ session, token }) {
       (session as any).accessToken = token.accessToken;
       (session as any).provider = token.provider;
+      (session as any).login = token.login;
       return session;
     },
   },

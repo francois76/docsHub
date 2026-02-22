@@ -9,6 +9,8 @@ export interface ReviewComment {
   path?: string;
   /** Whether this is the current user's comment */
   isOwn?: boolean;
+  /** Internal: which GitHub API endpoint owns this comment */
+  commentType?: "issue_comment" | "review_comment";
 }
 
 export interface PullRequest {
@@ -64,4 +66,10 @@ export interface ReviewProvider {
     baseBranch: string,
     title?: string
   ): Promise<PullRequest>;
+  /** Delete a comment by id */
+  deleteComment(
+    repo: string,
+    commentId: string | number,
+    commentType?: string
+  ): Promise<void>;
 }

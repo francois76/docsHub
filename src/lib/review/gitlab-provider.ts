@@ -194,4 +194,12 @@ export class GitLabReviewProvider implements ReviewProvider {
       url: mr.web_url,
     };
   }
+
+  async deleteComment(
+    _repo: string,
+    _commentId: string | number,
+    _commentType?: string
+  ): Promise<void> {
+    throw new Error("deleteComment not yet implemented for GitLab");
+  }
 }

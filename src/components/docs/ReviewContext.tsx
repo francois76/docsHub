@@ -34,6 +34,7 @@ export interface ReviewContextValue {
     line: number,
     body: string
   ) => Promise<void>;
+  deleteComment: (commentId: string | number, commentType?: string) => Promise<void>;
   submitReview: (
     action: "approve" | "request_changes",
     body?: string
@@ -189,6 +190,29 @@ export function ReviewProvider({
     [repo, pr]
   );
 
+  /* ── delete comment ─────────────────────────────────────────── */
+  const deleteComment = useCallback(
+    async (commentId: string | number, commentType?: string) => {
+      try {
+        const res = await fetch(
+          `/api/reviews/${encodeURIComponent(repo)}`,
+          {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ commentId, commentType }),
+          }
+        );
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        setComments((prev) => prev.filter((c) => c.id !== commentId));
+        toast.success("Commentaire supprimé");
+      } catch (err) {
+        toast.error(`Erreur lors de la suppression : ${err}`);
+      }
+    },
+    [repo]
+  );
+
   /* ── submit formal review ──────────────────────────────────── */
   const submitReview = useCallback(
     async (action: "approve" | "request_changes", body?: string) => {
@@ -245,6 +269,7 @@ export function ReviewProvider({
         createPR,
         addComment,
         addInlineComment,
+        deleteComment,
         submitReview,
         refresh: fetchReview,
         signInForReview,

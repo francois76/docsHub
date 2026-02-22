@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useRef, useState, type Ref } from "react";
 import { createPortal } from "react-dom";
-import { Send, X, MessageSquare } from "lucide-react";
+import { Send, X, MessageSquare, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useReview } from "./ReviewContext";
@@ -60,20 +60,24 @@ interface Props {
   filePath?: string;
 }
 
+/** Describes an open inline annotation widget */
+interface ActiveLine {
+  line: number;
+  blockEl: HTMLElement;
+  rowEl: HTMLElement | null;
+}
+
 export function MarkdownViewer({ html, filePath }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const review = useReview();
   const isReviewMode = !!(review?.pr && filePath);
 
-  /* state for inline comment form */
-  const [addingAtLine, setAddingAtLine] = useState<number | null>(null);
-  const [formContainer, setFormContainer] = useState<HTMLDivElement | null>(null);
-  /* ref to the currently-open comment panel so Cancel can close it */
-  const activePanelRef = useRef<HTMLDivElement | null>(null);
+  const [activeLine, setActiveLine] = useState<ActiveLine | null>(null);
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
 
-  /* reset form when file changes */
+  /* reset widget when file changes */
   useEffect(() => {
-    setAddingAtLine(null);
+    setActiveLine(null);
   }, [filePath]);
 
   /* ──────────────────────────────────────────────────────────── */
@@ -196,9 +200,10 @@ export function MarkdownViewer({ html, filePath }: Props) {
 
     directBlocks.forEach((block) => {
       const lineStart = parseInt(block.getAttribute("data-source-line-start")!);
-      const lineEnd = parseInt(block.getAttribute("data-source-line-end")!);
+      const lineEnd   = parseInt(block.getAttribute("data-source-line-end")!);
 
       block.classList.add("review-annotated-block");
+      cleanups.push(() => block.classList.remove("review-annotated-block"));
 
       /* ── Detect fine-grained sub-items ────────────────────── */
       const tableRows = Array.from(block.querySelectorAll<HTMLElement>("tr"));
@@ -208,57 +213,10 @@ export function MarkdownViewer({ html, filePath }: Props) {
       const subElements: HTMLElement[] = tableRows.length > 0 ? tableRows : codeLineSpans;
       const hasFineGrained = subElements.length > 0;
 
-      /* ── Existing comments for this block ─────────────────── */
-      const blockComments = fileComments.filter(
-        (c) => c.line !== undefined && c.line >= lineStart && c.line <= lineEnd
-      );
-
-      /* ── Comment panel (inside block, absolutely positioned) ─ */
-      // For PLAIN blocks: one shared panel anchored to block top (bottom:100% CSS).
-      // For FINE-GRAINED blocks: one panel per sub-element, top set via rAF.
-      let sharedPanel: HTMLDivElement | null = null;
-      if (blockComments.length > 0 && !hasFineGrained) {
-        sharedPanel = document.createElement("div");
-        sharedPanel.className =
-          "inline-comments-group inline-comments-group--collapsed";
-        blockComments.forEach((c) => {
-          const card = document.createElement("div");
-          card.className = `inline-comment-card${c.isOwn ? " own" : ""}`;
-          card.innerHTML = `
-            <div class="inline-comment-header">
-              <span class="inline-comment-author">${escapeHtml(c.author)}</span>
-              ${c.line ? `<span class="inline-comment-line">L${c.line}</span>` : ""}
-              <span class="inline-comment-time">${new Date(c.createdAt).toLocaleString()}</span>
-            </div>
-            <div class="inline-comment-body">${escapeHtml(c.body)}</div>
-          `;
-          sharedPanel!.appendChild(card);
-        });
-        // Footer to allow adding a comment on a line that already has some.
-        {
-          const footer = document.createElement("div");
-          footer.className = "inline-comment-footer";
-          const addBtn = document.createElement("button");
-          addBtn.type = "button";
-          addBtn.className = "inline-comment-add-btn";
-          addBtn.textContent = "+ Commenter";
-          addBtn.addEventListener("click", () => {
-            sharedPanel!.classList.add("inline-comments-group--collapsed");
-            activePanelRef.current = null;
-            setAddingAtLine(lineStart);
-          });
-          footer.appendChild(addBtn);
-          sharedPanel!.appendChild(footer);
-        }
-        block.appendChild(sharedPanel); // inside, positioned absolutely
-        cleanups.push(() => sharedPanel?.remove());
-      }
-
       /* ── Build one gutter button (+ or count badge) ────────── */
-      // ownPanel: the comment panel this specific button controls.
       const makeBtn = (
         targetLine: number,
-        ownPanel: HTMLDivElement | null
+        rowElForLine: HTMLElement | null
       ): HTMLButtonElement => {
         const btn = document.createElement("button");
         btn.type = "button";
@@ -268,7 +226,7 @@ export function MarkdownViewer({ html, filePath }: Props) {
         if (count > 0) {
           btn.classList.add("review-line-plus--has-comments");
           btn.innerHTML = `<span class="review-line-count">${count}</span>`;
-          btn.title = `${count} commentaire(s) — cliquer pour afficher/masquer`;
+          btn.title = `${count} commentaire(s)`;
         } else {
           btn.textContent = "+";
           btn.title = `Commenter ligne ${targetLine}`;
@@ -277,92 +235,33 @@ export function MarkdownViewer({ html, filePath }: Props) {
           e.preventDefault();
           e.stopPropagation();
           const line = parseInt(btn.dataset.line!);
-          if (ownPanel) {
-            // Badge button: close any open form first, then toggle panel.
-            setAddingAtLine(null);
-            ownPanel.classList.toggle("inline-comments-group--collapsed");
-            activePanelRef.current = ownPanel.classList.contains(
-              "inline-comments-group--collapsed"
-            )
+          setActiveLine((prev) =>
+            prev?.line === line && prev?.blockEl === block
               ? null
-              : ownPanel;
-          } else {
-            // Plain "+" (no comments): close any open panel, then open form.
-            if (activePanelRef.current) {
-              activePanelRef.current.classList.add(
-                "inline-comments-group--collapsed"
-              );
-              activePanelRef.current = null;
-            }
-            setAddingAtLine((prev) => (prev === line ? null : line));
-          }
+              : { line, blockEl: block, rowEl: rowElForLine }
+          );
         });
         return btn;
       };
 
       if (!hasFineGrained) {
         /* ── Plain block: single button, CSS hover on block ──── */
-        const btn = makeBtn(lineStart, sharedPanel);
+        const btn = makeBtn(lineStart, null);
         block.prepend(btn);
         cleanups.push(() => btn.remove());
       } else {
-        /* ── Fine-grained: one button + one panel per sub-element */
+        /* ── Fine-grained: one button per sub-element ─────────── */
         block.dataset.fineGrained = "true";
         cleanups.push(() => delete block.dataset.fineGrained);
 
         const btnMap = new Map<HTMLElement, HTMLButtonElement>();
-        const panelMap = new Map<HTMLElement, HTMLDivElement>();
 
         subElements.forEach((el, i) => {
           const lineForEl = Math.min(lineStart + i, lineEnd - 1);
-
-          // Build per-line comment panel (inside block, absolutely positioned).
-          const lineComments = fileComments.filter((c) => c.line === lineForEl);
-          let linePanel: HTMLDivElement | null = null;
-          if (lineComments.length > 0) {
-            linePanel = document.createElement("div");
-            linePanel.className =
-              "inline-comments-group inline-comments-group--collapsed inline-comments-group--fg";
-            lineComments.forEach((c) => {
-              const card = document.createElement("div");
-              card.className = `inline-comment-card${c.isOwn ? " own" : ""}`;
-              card.innerHTML = `
-                <div class="inline-comment-header">
-                  <span class="inline-comment-author">${escapeHtml(c.author)}</span>
-                  ${c.line ? `<span class="inline-comment-line">L${c.line}</span>` : ""}
-                  <span class="inline-comment-time">${new Date(c.createdAt).toLocaleString()}</span>
-                </div>
-                <div class="inline-comment-body">${escapeHtml(c.body)}</div>
-              `;
-              linePanel!.appendChild(card);
-            });
-            // Footer to allow adding another comment on this specific line.
-            {
-              const thisLine = lineForEl;
-              const thisPanel = linePanel!;
-              const footer = document.createElement("div");
-              footer.className = "inline-comment-footer";
-              const addBtn = document.createElement("button");
-              addBtn.type = "button";
-              addBtn.className = "inline-comment-add-btn";
-              addBtn.textContent = "+ Commenter";
-              addBtn.addEventListener("click", () => {
-                thisPanel.classList.add("inline-comments-group--collapsed");
-                activePanelRef.current = null;
-                setAddingAtLine(thisLine);
-              });
-              footer.appendChild(addBtn);
-              linePanel!.appendChild(footer);
-            }
-            block.appendChild(linePanel); // inside block, top set in rAF
-            cleanups.push(() => linePanel?.remove());
-          }
-
-          const btn = makeBtn(lineForEl, linePanel);
+          const btn = makeBtn(lineForEl, el);
           btn.style.visibility = "hidden";
           block.appendChild(btn);
           btnMap.set(el, btn);
-          if (linePanel) panelMap.set(el, linePanel);
           cleanups.push(() => btn.remove());
         });
 
@@ -371,10 +270,6 @@ export function MarkdownViewer({ html, filePath }: Props) {
             const midY = el.offsetTop + el.offsetHeight / 2;
             btn.style.top = `${midY - 11}px`;
             btn.style.visibility = "";
-          }
-          // Position each per-line panel just above its row.
-          for (const [el, panel] of panelMap) {
-            panel.style.top = `${el.offsetTop}px`;
           }
         });
         cleanups.push(() => cancelAnimationFrame(rafId));
@@ -398,72 +293,48 @@ export function MarkdownViewer({ html, filePath }: Props) {
   }, [html, isReviewMode, review?.pr, review?.comments, filePath]);
 
   /* ──────────────────────────────────────────────────────────── */
-  /*  Comment form container (portal target)                      */
+  /*  Widget portal container – positioned below the active row   */
   /* ──────────────────────────────────────────────────────────── */
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container || addingAtLine === null) return;
-
-    const allBlocks = container.querySelectorAll<HTMLElement>(
-      "[data-source-line-start]"
-    );
-    const directBlocks = Array.from(allBlocks).filter(
-      (el) => el.parentElement === container
-    );
-
-    for (const block of directBlocks) {
-      const lineStart = parseInt(block.getAttribute("data-source-line-start")!);
-      const lineEnd   = parseInt(block.getAttribute("data-source-line-end")!);
-
-      if (!(lineStart <= addingAtLine && addingAtLine <= lineEnd)) continue;
-
-      const formDiv = document.createElement("div");
-      // Always append inside the block so it never affects document flow.
-      formDiv.className = "inline-add-comment-container";
-      block.appendChild(formDiv);
-
-      if (block.dataset.fineGrained) {
-        // Position the form above the specific sub-row that was clicked.
-        const tableRows = Array.from(block.querySelectorAll<HTMLElement>("tr"));
-        const codeLines = Array.from(
-          block.querySelectorAll<HTMLElement>("span.line")
-        ).filter((s) => s.childNodes.length > 0);
-        const subEls = tableRows.length > 0 ? tableRows : codeLines;
-        const idx = addingAtLine - lineStart;
-        const el = subEls[Math.max(0, Math.min(idx, subEls.length - 1))];
-        if (el) {
-          formDiv.style.top = `${el.offsetTop}px`;
-          formDiv.style.transform = "translateY(-100%)";
-        }
-      }
-      // Plain blocks use CSS: bottom:100% (set via .inline-add-comment-container).
-
-      setFormContainer(formDiv);
-      return () => {
-        formDiv.remove();
-        setFormContainer(null);
-      };
+    if (!activeLine) {
+      setPortalContainer(null);
+      return;
     }
-  }, [addingAtLine, html]);
+    const { blockEl, rowEl } = activeLine;
+    const div = document.createElement("div");
+    div.className = "inline-comment-widget";
+    blockEl.appendChild(div);
+
+    const rafId = requestAnimationFrame(() => {
+      const top = rowEl
+        ? rowEl.offsetTop + rowEl.offsetHeight
+        : blockEl.offsetHeight;
+      div.style.top = `${top}px`;
+    });
+
+    setPortalContainer(div);
+    return () => {
+      cancelAnimationFrame(rafId);
+      div.remove();
+      setPortalContainer(null);
+    };
+  }, [activeLine]);
 
   /* ──────────────────────────────────────────────────────────── */
-  /*  Active-line highlight when form is open                     */
+  /*  Active-button highlight                                      */
   /* ──────────────────────────────────────────────────────────── */
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-
     container
       .querySelectorAll<HTMLElement>(".review-line-plus--active")
       .forEach((el) => el.classList.remove("review-line-plus--active"));
-
-    if (addingAtLine === null) return;
-
+    if (activeLine === null) return;
     const activeBtn = container.querySelector<HTMLElement>(
-      `.review-line-plus[data-line="${addingAtLine}"]`
+      `.review-line-plus[data-line="${activeLine.line}"]`
     );
     activeBtn?.classList.add("review-line-plus--active");
-  }, [addingAtLine]);
+  }, [activeLine]);
 
   /* ──────────────────────────────────────────────────────────── */
   /*  Render                                                      */
@@ -471,32 +342,26 @@ export function MarkdownViewer({ html, filePath }: Props) {
   return (
     <div className={isReviewMode ? "review-mode" : undefined}>
       <MarkdownContent html={html} innerRef={containerRef} />
-      {formContainer &&
-        addingAtLine !== null &&
+      {portalContainer &&
+        activeLine !== null &&
         filePath &&
         createPortal(
-          <AddCommentForm
-            line={addingAtLine}
+          <InlineCommentWidget
+            line={activeLine.line}
             filePath={filePath}
-            onClose={() => {
-              activePanelRef.current?.classList.add(
-                "inline-comments-group--collapsed"
-              );
-              activePanelRef.current = null;
-              setAddingAtLine(null);
-            }}
+            onClose={() => setActiveLine(null)}
           />,
-          formContainer
+          portalContainer
         )}
     </div>
   );
 }
 
 /* ────────────────────────────────────────────────────────────── */
-/*  Inline comment form (rendered via portal)                     */
+/*  Unified inline comment widget (comments + form in one block)  */
 /* ────────────────────────────────────────────────────────────── */
 
-function AddCommentForm({
+function InlineCommentWidget({
   line,
   filePath,
   onClose,
@@ -508,18 +373,24 @@ function AddCommentForm({
   const review = useReview();
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<
+    string | number | null
+  >(null);
 
-  /* Close on Escape key */
+  const lineComments =
+    review?.comments.filter((c) => c.path === filePath && c.line === line) ??
+    [];
+
+  /* Close on Escape */
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handle = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
         onClose();
       }
     };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-    // onClose is stable (setAddingAtLine is a stable React setter)
+    document.addEventListener("keydown", handle);
+    return () => document.removeEventListener("keydown", handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -529,15 +400,21 @@ function AddCommentForm({
     await review.addInlineComment(filePath, line, body.trim());
     setBody("");
     setSubmitting(false);
-    onClose();
+  };
+
+  const handleDelete = async (id: string | number, cType?: string) => {
+    if (!review) return;
+    await review.deleteComment(id, cType);
+    setConfirmDeleteId(null);
   };
 
   return (
-    <div className="inline-add-comment-form">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+    <div className="inline-comment-widget-inner">
+      {/* Header */}
+      <div className="inline-comment-widget-header">
+        <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
           <MessageSquare className="h-3 w-3" />
-          Commentaire ligne {line}
+          Ligne {line}
         </span>
         <button
           type="button"
@@ -547,24 +424,54 @@ function AddCommentForm({
           <X className="h-3 w-3" />
         </button>
       </div>
+
+      {/* Existing comments */}
+      {lineComments.length > 0 && (
+        <div className="inline-comment-list">
+          {lineComments.map((c) => (
+            <div
+              key={c.id}
+              className={`inline-comment-card${c.isOwn ? " own" : ""}`}
+            >
+              <div className="inline-comment-header">
+                <span className="inline-comment-author">{c.author}</span>
+                <span className="inline-comment-time">
+                  {new Date(c.createdAt).toLocaleString()}
+                </span>
+                {/* Token mode: anyone can delete. OAuth mode: only own comments. */}
+                {review?.canReview &&
+                  (review.authMode === "token" || c.isOwn) && (
+                  <button
+                    type="button"
+                    title="Supprimer ce commentaire"
+                    onClick={() => setConfirmDeleteId(c.id)}
+                    className="inline-comment-delete-btn"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              <div className="inline-comment-body">{c.body}</div>
+            </div>
+          ))}
+          <div className="inline-comment-divider" />
+        </div>
+      )}
+
+      {/* New comment form */}
       <Textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleSubmit();
         }}
-        placeholder="Votre commentaire… (Échap pour fermer, Ctrl+Entrée pour envoyer)"
+        placeholder="Votre commentaire… (Ctrl+Entrée pour envoyer)"
         rows={3}
         className="text-sm resize-none mb-2"
-        autoFocus
+        autoFocus={lineComments.length === 0}
       />
       <div className="flex justify-end gap-2">
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onClose}
-          className="text-xs"
-        >
+        <Button size="sm" variant="ghost" onClick={onClose} className="text-xs">
           Annuler
         </Button>
         <Button
@@ -577,6 +484,71 @@ function AddCommentForm({
           Envoyer
         </Button>
       </div>
+
+      {/* Delete confirmation modal */}
+      {confirmDeleteId !== null && (() => {
+        const c = lineComments.find((x) => x.id === confirmDeleteId);
+        return (
+          <ConfirmModal
+            message="Supprimer ce commentaire définitivement ?"
+            onConfirm={() => handleDelete(confirmDeleteId, c?.commentType)}
+            onCancel={() => setConfirmDeleteId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
+
+/* ────────────────────────────────────────────────────────────── */
+/*  Confirmation modal (portal into document.body)               */
+/* ────────────────────────────────────────────────────────────── */
+
+function ConfirmModal({
+  message,
+  onConfirm,
+  onCancel,
+}: {
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  /* Close on Escape */
+  useEffect(() => {
+    const handle = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onCancel();
+      }
+    };
+    document.addEventListener("keydown", handle);
+    return () => document.removeEventListener("keydown", handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return createPortal(
+    <div
+      className="confirm-modal-overlay"
+      onClick={onCancel}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="confirm-modal"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="confirm-modal-message">{message}</p>
+        <div className="confirm-modal-actions">
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            Annuler
+          </Button>
+          <Button variant="destructive" size="sm" onClick={onConfirm}>
+            Supprimer
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+

@@ -38,7 +38,7 @@ export async function GET(
       repoConfig,
       (session as any)?.accessToken,
       (session as any)?.provider,
-      session?.user?.name ?? undefined
+      (session as any)?.login ?? session?.user?.name ?? undefined
     );
 
     if (!provider) {
@@ -83,7 +83,7 @@ export async function POST(
       repoConfig,
       (session as any)?.accessToken,
       (session as any)?.provider,
-      session?.user?.name ?? undefined
+      (session as any)?.login ?? session?.user?.name ?? undefined
     );
 
     if (!provider) {
@@ -132,6 +132,48 @@ export async function POST(
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  } catch (error) {
+    return NextResponse.json({ error: String(error) }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ repo: string }> }
+) {
+  const { repo } = await params;
+  const repoName = decodeURIComponent(repo);
+  const body = await req.json();
+  const { commentId, commentType } = body;
+
+  if (!commentId) {
+    return NextResponse.json({ error: "Missing commentId" }, { status: 400 });
+  }
+
+  try {
+    const [config, session] = await Promise.all([
+      getConfig(),
+      getServerSession(authOptions),
+    ]);
+
+    const repoConfig = getRepoConfig(repoName, config);
+    const provider = createReviewProvider(
+      repoConfig,
+      (session as any)?.accessToken,
+      (session as any)?.provider,
+      (session as any)?.login ?? session?.user?.name ?? undefined
+    );
+
+    if (!provider) {
+      return NextResponse.json({ error: "No review provider available" }, { status: 400 });
+    }
+
+    const apiRepo = repoConfig.url
+      ? extractRepoPath(repoConfig.url, repoConfig.type)
+      : repoName;
+
+    await provider.deleteComment(apiRepo, commentId, commentType);
+    return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
