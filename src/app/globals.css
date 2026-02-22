@@ -152,6 +152,94 @@
 }
 
 /* Mermaid diagrams */
+.mermaid-wrapper {
+  position: relative;
+  display: block;
+}
+
+.mermaid-wrapper:hover .mermaid-fullscreen-btn {
+  opacity: 1;
+}
+
+.mermaid-fullscreen-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  opacity: 0;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: opacity 0.2s, background-color 0.15s, color 0.15s;
+}
+
+.mermaid-fullscreen-btn:hover {
+  background: #ffffff;
+  color: #374151;
+}
+
+/* Fullscreen overlay — pure DOM, no React state */
+.mermaid-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.mermaid-fullscreen-modal {
+  position: relative;
+  max-height: 90vh;
+  max-width: 90vw;
+  width: 100%;
+  overflow: auto;
+  background: white;
+  border-radius: 0.75rem;
+  padding: 2rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.mermaid-fullscreen-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.mermaid-fullscreen-close:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.mermaid-fullscreen-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mermaid-fullscreen-content svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .mermaid-container {
   @apply flex justify-center my-6 p-4 bg-muted/30 rounded-lg overflow-x-auto;
 }
@@ -160,9 +248,135 @@
   @apply max-w-full;
 }
 
+/* Prevent double scrollbar: the container already handles overflow */
+.mermaid-container pre {
+  overflow: visible;
+}
+
 /* Shiki code blocks */
 .shiki {
   @apply rounded-lg overflow-x-auto text-sm;
+}
+
+/* ── Review-mode inline annotations ──────────────────────────── */
+
+.review-mode .markdown-body {
+  padding-left: 2.5rem;
+}
+
+.review-annotated-block {
+  position: relative;
+}
+
+.review-line-plus {
+  position: absolute;
+  left: -2rem;
+  top: 0.125rem;
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s;
+  z-index: 5;
+}
+
+.review-annotated-block:hover .review-line-plus {
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.08);
+}
+
+/* When any inline form is open, keep ALL "+" buttons faintly visible
+   so the user knows they can switch to a different line */
+.review-has-active-comment .review-line-plus {
+  color: hsl(var(--primary) / 0.35);
+  border-color: hsl(var(--primary) / 0.35);
+}
+
+/* The specific "+" button whose form is currently open */
+.review-line-plus--active {
+  color: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary)) !important;
+  background: hsl(var(--primary) / 0.15) !important;
+}
+
+.review-line-plus:hover {
+  background: hsl(var(--primary)) !important;
+  color: white !important;
+}
+
+/* Inline comment cards (rendered via DOM manipulation) */
+.inline-comments-group {
+  margin: 0.5rem 0 1rem;
+}
+
+.inline-comment-card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.375rem;
+  border-left: 3px solid hsl(var(--muted-foreground) / 0.3);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.inline-comment-card.own {
+  border-left-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.04);
+}
+
+.inline-comment-header {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.25rem;
+}
+
+.inline-comment-author {
+  font-weight: 600;
+}
+
+.inline-comment-line {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.625rem;
+  background: hsl(var(--muted));
+  border-radius: 0.25rem;
+  padding: 0 0.25rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.inline-comment-time {
+  margin-left: auto;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.625rem;
+}
+
+.inline-comment-body {
+  color: hsl(var(--muted-foreground));
+  white-space: pre-wrap;
+}
+
+/* Comment form (rendered via React portal) */
+.inline-add-comment-container {
+  margin: 0.5rem 0 1rem;
+}
+
+.inline-add-comment-form {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--primary) / 0.3);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 /* Scrollbar styles */

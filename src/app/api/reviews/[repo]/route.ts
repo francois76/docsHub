@@ -4,6 +4,15 @@ import { authOptions } from "@/lib/auth";
 import { getConfig, getRepoConfig } from "@/lib/config";
 import { createReviewProvider } from "@/lib/review";
 
+/** Fields included in every GET response so the client knows the repo context */
+function repoMeta(repoConfig: { type: string; authMode?: string; defaultBranch?: string }) {
+  return {
+    authMode: repoConfig.authMode ?? "token",
+    repoType: repoConfig.type,
+    defaultBranch: repoConfig.defaultBranch ?? "main",
+  };
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ repo: string }> }
@@ -24,6 +33,7 @@ export async function GET(
     ]);
 
     const repoConfig = getRepoConfig(repoName, config);
+    const meta = repoMeta(repoConfig);
     const provider = createReviewProvider(
       repoConfig,
       (session as any)?.accessToken,
@@ -32,7 +42,7 @@ export async function GET(
     );
 
     if (!provider) {
-      return NextResponse.json({ pr: null, comments: [], canReview: false });
+      return NextResponse.json({ pr: null, comments: [], canReview: false, ...meta });
     }
 
     // Determine the full repo path for API calls (e.g. "owner/repo")
@@ -42,11 +52,12 @@ export async function GET(
 
     const pr = await provider.findPR(apiRepo, branch);
     if (!pr) {
-      return NextResponse.json({ pr: null, comments: [], canReview: false });
+      // Provider exists (token is valid) but no PR yet → canReview: true so user can create one
+      return NextResponse.json({ pr: null, comments: [], canReview: true, ...meta });
     }
 
     const comments = await provider.listComments(apiRepo, pr.number);
-    return NextResponse.json({ pr, comments, canReview: true });
+    return NextResponse.json({ pr, comments, canReview: true, ...meta });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
@@ -83,6 +94,17 @@ export async function POST(
       ? extractRepoPath(repoConfig.url, repoConfig.type)
       : repoName;
 
+    // ── Create a new PR ──
+    if (action === "create_pr") {
+      const { branch: headBranch, baseBranch, title } = body;
+      if (!headBranch || !baseBranch) {
+        return NextResponse.json({ error: "Missing branch parameters" }, { status: 400 });
+      }
+      const pr = await provider.createPR(apiRepo, headBranch, baseBranch, title);
+      return NextResponse.json({ pr });
+    }
+
+    // ── Comment (global or inline) ──
     if (action === "comment") {
       if (filePath && line) {
         const result = await provider.addInlineComment(
@@ -98,7 +120,10 @@ export async function POST(
         const result = await provider.addComment(apiRepo, prNumber, comment);
         return NextResponse.json(result);
       }
-    } else if (["approve", "request_changes"].includes(action)) {
+    }
+
+    // ── Approve / Request changes ──
+    if (["approve", "request_changes"].includes(action)) {
       await provider.submitReview(apiRepo, prNumber, {
         action,
         body: comment,

@@ -84,16 +84,34 @@ export class GitService {
     return this.getTreeAtPath(branch, docsDir);
   }
 
+  /**
+   * Resolve a branch name to the git ref that actually exists.
+   * A branch that has been fetched but never checked out only exists as
+   * `origin/{branch}` (remote-tracking ref). `git ls-tree {branch}` would
+   * fail silently in that case, so we fall back to the remote ref.
+   */
+  private async resolveRef(branch: string): Promise<string> {
+    try {
+      // Check if the local ref exists
+      await this.git.raw(["rev-parse", "--verify", branch]);
+      return branch;
+    } catch {
+      // Fall back to remote-tracking ref
+      return `origin/${branch}`;
+    }
+  }
+
   private async getTreeAtPath(
     branch: string,
     treePath: string
   ): Promise<FileTreeNode[]> {
     try {
+      const ref = await this.resolveRef(branch);
       const result = await this.git.raw([
         "ls-tree",
         "-r",
         "--name-only",
-        branch,
+        ref,
         `${treePath}/`,
       ]);
 
@@ -109,7 +127,8 @@ export class GitService {
   /** Read a file's content at a specific branch */
   async readFile(branch: string, filePath: string): Promise<string> {
     try {
-      const content = await this.git.show([`${branch}:${filePath}`]);
+      const ref = await this.resolveRef(branch);
+      const content = await this.git.show([`${ref}:${filePath}`]);
       return content;
     } catch (err) {
       throw new Error(
@@ -120,14 +139,12 @@ export class GitService {
 
   /** Read a binary file as a Buffer at a specific branch */
   async readFileBuffer(branch: string, filePath: string): Promise<Buffer> {
-    const repoGit = simpleGit(this.repoPath);
+    const ref = await this.resolveRef(branch);
     return new Promise((resolve, reject) => {
-      const chunks: Buffer[] = [];
-      // Use raw git show piped through process
       const { execFile } = require("child_process");
       execFile(
         "git",
-        ["-C", this.repoPath, "show", `${branch}:${filePath}`],
+        ["-C", this.repoPath, "show", `${ref}:${filePath}`],
         { encoding: "buffer", maxBuffer: 50 * 1024 * 1024 },
         (err: Error | null, stdout: Buffer) => {
           if (err) return reject(err);

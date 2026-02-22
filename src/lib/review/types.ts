@@ -57,4 +57,11 @@ export interface ReviewProvider {
     prNumber: number,
     payload: SubmitReviewPayload
   ): Promise<void>;
+  /** Create a new pull request / merge request */
+  createPR(
+    repo: string,
+    headBranch: string,
+    baseBranch: string,
+    title?: string
+  ): Promise<PullRequest>;
 }

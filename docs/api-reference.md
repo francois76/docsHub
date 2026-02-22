@@ -249,14 +249,23 @@ Recherche la PR ouverte correspondant à la branche courante et retourne ses com
       "isOwn": false
     }
   ],
-  "canReview": true
+  "canReview": true,
+  "authMode": "token",
+  "repoType": "github",
+  "defaultBranch": "main"
 }
 ```
 
-**Réponse — Pas de PR**
+**Réponse — Pas de PR (mais provider disponible)**
 
 ```json
-{ "pr": null, "comments": [], "canReview": false }
+{ "pr": null, "comments": [], "canReview": true, "authMode": "token", "repoType": "github", "defaultBranch": "main" }
+```
+
+**Réponse — Pas de provider (token manquant ou session OAuth absente)**
+
+```json
+{ "pr": null, "comments": [], "canReview": false, "authMode": "token", "repoType": "github", "defaultBranch": "main" }
 ```
 
 ---
@@ -286,12 +295,15 @@ Poste une action de revue sur une PR (commentaire global, commentaire inline, ap
 
 | Champ | Type | Description |
 |-------|------|-------------|
-| `prNumber` | `number` | Numéro de la PR |
-| `action` | `"comment" \| "approve" \| "request_changes"` | Type d'action |
+| `prNumber` | `number` | Numéro de la PR (ignoré pour `create_pr`) |
+| `action` | `"comment" \| "approve" \| "request_changes" \| "create_pr"` | Type d'action |
 | `comment` | `string?` | Corps du commentaire |
 | `filePath` | `string?` | Chemin du fichier (commentaire inline uniquement) |
 | `line` | `number?` | Ligne ciblée (commentaire inline uniquement) |
 | `commitSha` | `string?` | SHA du commit (requis pour certains providers inline) |
+| `branch` | `string?` | Branche source (requis pour `create_pr`) |
+| `baseBranch` | `string?` | Branche cible (requis pour `create_pr`) |
+| `title` | `string?` | Titre de la PR (optionnel pour `create_pr`, auto-généré si absent) |
 
 **Réponse**
 
@@ -305,6 +317,13 @@ Poste une action de revue sur une PR (commentaire global, commentaire inline, ap
 |------|-------|
 | `400` | Provider de revue non disponible |
 | `500` | Erreur API plateforme |
+
+> **Commentaires inline GitHub**
+>
+> Les commentaires inline utilisent la mutation GraphQL `addPullRequestReviewThread`.
+> Si la ligne ciblée est dans le diff, le commentaire s'affiche directement sur la ligne dans « Files changed ».
+> Si la ligne est hors du diff (limitation des API publiques GitHub — l'UI web utilise une API interne),
+> le commentaire est rattaché au fichier dans « Files changed » avec la référence `📄 fichier:ligne` dans le corps.
 
 ---
 

@@ -36,8 +36,9 @@ export class GitHubReviewProvider implements ReviewProvider {
   }
 
   async findPR(repo: string, headBranch: string): Promise<PullRequest | null> {
+    const owner = repo.split('/')[0];
     const prs = await this.request<any[]>(
-      `/repos/${repo}/pulls?state=open&head=${headBranch}&per_page=5`
+      `/repos/${repo}/pulls?state=open&head=${encodeURIComponent(`${owner}:${headBranch}`)}&per_page=5`
     );
     if (!prs.length) return null;
     const pr = prs[0];
@@ -106,35 +107,95 @@ export class GitHubReviewProvider implements ReviewProvider {
   ): Promise<ReviewComment> {
     const displayBody = this.userName ? `**[${this.userName}]:** ${body}` : body;
 
-    // We need the latest commit SHA if not provided
-    let sha = commitSha;
-    if (!sha) {
-      const pr = await this.request<any>(`/repos/${repo}/pulls/${prNumber}`);
-      sha = pr.head.sha;
+    // Fetch the PR node_id needed by the GraphQL API
+    const prData = await this.request<any>(`/repos/${repo}/pulls/${prNumber}`);
+
+    const graphqlUrl = this.baseUrl.replace(/\/api\/v3\/?$/, "/api/graphql")
+      .replace(/^(https:\/\/api\.github\.com)\/?$/, "$1/graphql");
+
+    // Try line-level comment first (works if the line is in a diff hunk).
+    // If that returns thread:null, retry as file-level comment.
+    // Note: GitHub's public APIs (REST & GraphQL) can only target lines
+    // within diff hunks. The web UI uses an internal API for arbitrary lines.
+    const node = await this.graphqlCreateThread(graphqlUrl, prData.node_id, {
+      body: displayBody,
+      path: filePath,
+      line,
+      side: "RIGHT",
+      subjectType: "LINE",
+    }) ?? await this.graphqlCreateThread(graphqlUrl, prData.node_id, {
+      body: `${displayBody}\n\n> 📄 \`${filePath}\` — ligne ${line}`,
+      path: filePath,
+      subjectType: "FILE",
+    });
+
+    if (!node) {
+      throw new Error(
+        `Impossible de commenter sur ${filePath}:${line} — le fichier n'est probablement pas dans le diff de la PR.`
+      );
     }
 
-    const c = await this.request<any>(
-      `/repos/${repo}/pulls/${prNumber}/comments`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          body: displayBody,
-          commit_id: sha,
-          path: filePath,
-          line,
-          side: "RIGHT",
-        }),
-      }
-    );
     return {
-      id: c.id,
-      author: c.user?.login ?? "unknown",
-      body: c.body,
-      createdAt: c.created_at,
-      path: c.path,
-      line: c.line ?? c.original_line,
+      id: node.databaseId,
+      author: node.author?.login ?? "unknown",
+      body: node.body,
+      createdAt: node.createdAt,
+      path: node.path ?? filePath,
+      line: node.line ?? line,
       isOwn: true,
     };
+  }
+
+  /**
+   * Create a review thread via the GitHub GraphQL API.
+   * Returns the first comment node, or null if `thread` came back null
+   * (which means GitHub couldn't resolve the target).
+   */
+  private async graphqlCreateThread(
+    graphqlUrl: string,
+    pullRequestNodeId: string,
+    input: Record<string, unknown>
+  ): Promise<any | null> {
+    const res = await fetch(graphqlUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: `
+          mutation($input: AddPullRequestReviewThreadInput!) {
+            addPullRequestReviewThread(input: $input) {
+              thread {
+                comments(first: 1) {
+                  nodes {
+                    databaseId
+                    author { login }
+                    body
+                    createdAt
+                    path
+                    line
+                  }
+                }
+              }
+            }
+          }`,
+        variables: {
+          input: {
+            pullRequestId: pullRequestNodeId,
+            ...input,
+          },
+        },
+      }),
+    });
+
+    const json = await res.json();
+
+    if (json.errors?.length) {
+      throw new Error(json.errors.map((e: any) => e.message).join("; "));
+    }
+
+    return json.data?.addPullRequestReviewThread?.thread?.comments?.nodes?.[0] ?? null;
   }
 
   async submitReview(
@@ -161,5 +222,30 @@ export class GitHubReviewProvider implements ReviewProvider {
         })),
       }),
     });
+  }
+
+  async createPR(
+    repo: string,
+    headBranch: string,
+    baseBranch: string,
+    title?: string
+  ): Promise<PullRequest> {
+    const pr = await this.request<any>(`/repos/${repo}/pulls`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: title ?? `Documentation review: ${headBranch}`,
+        head: headBranch,
+        base: baseBranch,
+      }),
+    });
+    return {
+      id: pr.id,
+      number: pr.number,
+      title: pr.title,
+      state: pr.state,
+      head: pr.head.ref,
+      base: pr.base.ref,
+      url: pr.html_url,
+    };
   }
 }

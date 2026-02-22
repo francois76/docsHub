@@ -13,8 +13,8 @@
 | 📝 **Markdown riche** | Tables, images, code fencé avec coloration Shiki (qualité VS Code) |
 | 🧜 **Diagrammes Mermaid** | Flowcharts, séquences, ER — rendus côté client |
 | 🔍 **Arborescence sidebar** | Vue en arbre collapsible du dossier `docs/` |
-| 💬 **Revues de PR** | Lister, poster des commentaires globaux/inline, approuver, demander des changements |
-| 🔐 **Double auth** | OAuth (GitHub/GitLab) ou service token avec préfixe `[Username]` |
+| 💬 **Revues de PR** | Créer une PR, commenter inline dans le rendu Markdown, approuver, demander des changements |
+| 🔐 **Auth par projet** | Mode token (service account) ou OAuth (GitHub/GitLab) — adapté par dépôt |
 | 🔄 **Sync manuelle** | Bouton sync pour récupérer le dernier état des dépôts distants |
 
 ---
@@ -101,9 +101,11 @@ src/
 │   └── docs/[repo]/[branch]/    # Pages du visualiseur de docs
 ├── components/
 │   ├── docs/
-│   │   ├── MarkdownViewer.tsx   # Rendu HTML + injection Mermaid
+│   │   ├── MarkdownViewer.tsx   # Rendu HTML + Mermaid + annotations inline revue
 │   │   ├── MermaidDiagram.tsx   # Renderer Mermaid côté client
-│   │   └── ReviewPanel.tsx      # Sidebar de revue de PR
+│   │   ├── ReviewContext.tsx    # Contexte React revue (PR, commentaires, actions)
+│   │   ├── ReviewBar.tsx        # Barre de revue en bas de page
+│   │   └── ReviewPanel.tsx      # (déprécié — remplacé par ReviewBar)
 │   ├── layout/
 │   │   ├── TopBar.tsx           # Sélecteurs repo/branche + bouton sync
 │   │   └── DocsSidebar.tsx      # Arborescence des fichiers
