@@ -9,11 +9,19 @@ const eslintConfig = [
   ...nextCoreWebVitals,
   ...nextTypescript,
 
-  // ─── TypeScript strict type-checked presets ──────────────────────────────────
+  // ─── TypeScript strict type-checked presets (scoped to TS files only) ─────────
   // strictTypeChecked includes all of strict + rules that need type information.
   // stylisticTypeChecked adds consistent code style with type awareness.
-  ...tseslint.configs.strictTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
+  // Both presets are scoped to *.ts / *.tsx so that .mjs / .js files (e.g. this
+  // config file itself) are not processed with type-information rules.
+  ...tseslint.configs.strictTypeChecked.map((config) => ({
+    ...config,
+    files: ["**/*.ts", "**/*.tsx"],
+  })),
+  ...tseslint.configs.stylisticTypeChecked.map((config) => ({
+    ...config,
+    files: ["**/*.ts", "**/*.tsx"],
+  })),
 
   // Parser options required for type-checked rules (tsc integration)
   {
