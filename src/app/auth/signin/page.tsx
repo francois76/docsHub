@@ -1,6 +1,7 @@
 "use client";
 
 import { signIn, getProviders } from "next-auth/react";
+import type { ClientSafeProvider } from "next-auth/react";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ function SignInContent() {
   const repoParam = searchParams.get("repo");
   const callbackUrl = searchParams.get("callbackUrl") || "/";
 
-  const [providers, setProviders] = useState<Record<string, any>>({});
+  const [providers, setProviders] = useState<Record<string, ClientSafeProvider>>({});
   const [repoType, setRepoType] = useState<string | null>(null);
 
   useEffect(() => {
@@ -32,7 +33,7 @@ function SignInContent() {
   }, [repoParam]);
 
   /* Filter providers to only show the one matching the repo type */
-  const filteredProviders = Object.values(providers).filter((p: any) => {
+  const filteredProviders = Object.values(providers).filter((p: ClientSafeProvider) => {
     if (!repoType) return true; // no context → show all configured
     if (repoType === "github") return p.id === "github";
     if (repoType === "gitlab") return p.id === "gitlab";
@@ -47,7 +48,7 @@ function SignInContent() {
           Connectez-vous pour activer les revues de PR.
         </p>
         <div className="flex flex-col gap-3">
-          {filteredProviders.map((provider: any) => (
+          {filteredProviders.map((provider: ClientSafeProvider) => (
             <Button
               key={provider.id}
               onClick={() => signIn(provider.id, { callbackUrl })}

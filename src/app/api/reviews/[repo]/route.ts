@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { getConfig, getRepoConfig } from "@/lib/config";
 import { createReviewProvider } from "@/lib/review";
 
+type ExtendedSession = { accessToken?: string; provider?: string; login?: string };
+
 /** Fields included in every GET response so the client knows the repo context */
 function repoMeta(repoConfig: { type: string; authMode?: string; defaultBranch?: string }) {
   return {
@@ -36,9 +38,9 @@ export async function GET(
     const meta = repoMeta(repoConfig);
     const provider = createReviewProvider(
       repoConfig,
-      (session as any)?.accessToken,
-      (session as any)?.provider,
-      (session as any)?.login ?? session?.user?.name ?? undefined
+      (session as ExtendedSession)?.accessToken,
+      (session as ExtendedSession)?.provider,
+      (session as ExtendedSession)?.login ?? session?.user?.name ?? undefined
     );
 
     if (!provider) {
@@ -81,9 +83,9 @@ export async function POST(
     const repoConfig = getRepoConfig(repoName, config);
     const provider = createReviewProvider(
       repoConfig,
-      (session as any)?.accessToken,
-      (session as any)?.provider,
-      (session as any)?.login ?? session?.user?.name ?? undefined
+      (session as ExtendedSession)?.accessToken,
+      (session as ExtendedSession)?.provider,
+      (session as ExtendedSession)?.login ?? session?.user?.name ?? undefined
     );
 
     if (!provider) {
@@ -159,9 +161,9 @@ export async function DELETE(
     const repoConfig = getRepoConfig(repoName, config);
     const provider = createReviewProvider(
       repoConfig,
-      (session as any)?.accessToken,
-      (session as any)?.provider,
-      (session as any)?.login ?? session?.user?.name ?? undefined
+      (session as ExtendedSession)?.accessToken,
+      (session as ExtendedSession)?.provider,
+      (session as ExtendedSession)?.login ?? session?.user?.name ?? undefined
     );
 
     if (!provider) {
@@ -179,7 +181,7 @@ export async function DELETE(
   }
 }
 
-function extractRepoPath(url: string, type: string): string {
+function extractRepoPath(url: string, _type: string): string {
   // Extract "owner/repo" from clone URL
   // https://github.com/owner/repo.git -> owner/repo
   // git@github.com:owner/repo.git -> owner/repo

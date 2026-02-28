@@ -95,7 +95,7 @@ async function getMarkdown(_repoName: string, _branch: string): Promise<Markdown
         .map((t) => t.content)
         .join("");
 
-      let slug = slugifyHeading(plainText);
+      const slug = slugifyHeading(plainText);
       const count = slugCount.get(slug) ?? 0;
       const finalSlug = count === 0 ? slug : `${slug}-${count}`;
       slugCount.set(slug, count + 1);

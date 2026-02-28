@@ -39,16 +39,16 @@ export const authOptions: NextAuthOptions = {
         // Store the OAuth username/login (not the display name) so we can
         // compare it against comment authors to determine isOwn.
         token.login =
-          (profile as any).login ??      // GitHub
-          (profile as any).username ??   // GitLab
+          (profile as Record<string, unknown>).login as string | undefined ??
+          (profile as Record<string, unknown>).username as string | undefined ??
           token.login;
       }
       return token;
     },
     async session({ session, token }) {
-      (session as any).accessToken = token.accessToken;
-      (session as any).provider = token.provider;
-      (session as any).login = token.login;
+      (session as Record<string, unknown>).accessToken = token.accessToken;
+      (session as Record<string, unknown>).provider = token.provider;
+      (session as Record<string, unknown>).login = token.login;
       return session;
     },
   },

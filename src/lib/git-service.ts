@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { execFile } from "child_process";
 import simpleGit, { SimpleGit } from "simple-git";
 import type { RepoConfig } from "@/types/config";
 import type { BranchInfo, FileTreeNode } from "@/types/git";
@@ -141,7 +142,6 @@ export class GitService {
   async readFileBuffer(branch: string, filePath: string): Promise<Buffer> {
     const ref = await this.resolveRef(branch);
     return new Promise((resolve, reject) => {
-      const { execFile } = require("child_process");
       execFile(
         "git",
         ["-C", this.repoPath, "show", `${ref}:${filePath}`],

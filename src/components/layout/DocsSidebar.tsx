@@ -115,6 +115,7 @@ export function DocsSidebar({ repo, branch }: Props) {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   useEffect(() => {
     const stored = parseInt(localStorage.getItem("sidebar-width") ?? "", 10);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (stored >= SIDEBAR_MIN && stored <= SIDEBAR_MAX) setSidebarWidth(stored);
   }, []);
   const isDragging = useRef(false);
@@ -155,7 +156,9 @@ export function DocsSidebar({ repo, branch }: Props) {
 
   /* ── tree fetch ─────────────────────────────────────────────── */
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
+     
     setTreeError(null);
     fetch(
       `/api/repos/${encodeURIComponent(repo)}/tree?branch=${encodeURIComponent(branch)}`
@@ -204,7 +207,6 @@ export function DocsSidebar({ repo, branch }: Props) {
         });
       })
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repo, branch]);
 
   return (
@@ -384,6 +386,7 @@ function FileNode({
   const [headingsOpen, setHeadingsOpen] = useState(() => isActive);
   const prevActiveRef = useRef(isActive);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isActive && !prevActiveRef.current) setHeadingsOpen(true);
     prevActiveRef.current = isActive;
   }, [isActive]);
@@ -464,7 +467,7 @@ function FileNode({
 /* ────────────────────────────────────────────────────────────── */
 
 function HeadingSubTree({
-  filePath,
+  filePath: _filePath,
   fileHref,
   headings,
   directCounts,

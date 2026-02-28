@@ -6,7 +6,6 @@ import { Send, X, MessageSquare, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useReview } from "./ReviewContext";
-import type { ReviewComment } from "@/lib/review/types";
 
 /* ────────────────────────────────────────────────────────────── */
 /*  SVG icons reused from the old file (Mermaid fullscreen)       */
@@ -19,15 +18,6 @@ const CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="2
 /* ────────────────────────────────────────────────────────────── */
 /*  Helpers                                                       */
 /* ────────────────────────────────────────────────────────────── */
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
 
 /* ────────────────────────────────────────────────────────────── */
 /*  Memoized HTML container – prevents React from resetting       */
@@ -290,6 +280,7 @@ export function MarkdownViewer({ html, filePath }: Props) {
     return () => {
       cleanups.forEach((fn) => fn());
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html, isReviewMode, review?.pr, review?.comments, filePath]);
 
   /* ──────────────────────────────────────────────────────────── */
@@ -385,7 +376,7 @@ function InlineCommentWidget({
   // Rule advanced-event-handler-refs: store the callback in a ref so the
   // effect never needs to re-subscribe when onClose identity changes.
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => { onCloseRef.current = onClose; });
 
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
@@ -520,7 +511,7 @@ function ConfirmModal({
   // Rule advanced-event-handler-refs: store the callback in a ref so the
   // effect never needs to re-subscribe when onCancel identity changes.
   const onCancelRef = useRef(onCancel);
-  onCancelRef.current = onCancel;
+  useEffect(() => { onCancelRef.current = onCancel; });
 
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {

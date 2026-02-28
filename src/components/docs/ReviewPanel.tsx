@@ -26,11 +26,11 @@ interface Props {
   filePath?: string;
 }
 
-export function ReviewPanel({ repo, branch, filePath }: Props) {
+export function ReviewPanel({ repo, branch }: Props) {
   const { data: session } = useSession();
   const [pr, setPr] = useState<PullRequest | null>(null);
   const [comments, setComments] = useState<ReviewComment[]>([]);
-  const [canReview, setCanReview] = useState(false);
+  const [_canReview, setCanReview] = useState(false);
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
