@@ -205,6 +205,33 @@ sequenceDiagram
 
 ---
 
+## Configuration ESLint stricte
+
+La configuration ESLint (`eslint.config.mjs`) est volontairement la plus stricte possible afin de cadrer le code généré et maintenu par IA. Elle repose sur quatre couches cumulatives.
+
+| Couche | Package | Préset activé | Objectif |
+|--------|---------|---------------|----------|
+| **Base Next.js** | `eslint-config-next` | `core-web-vitals` + `typescript` | React, hooks, @next/next, jsx-a11y |
+| **TypeScript strict** | `typescript-eslint` | `strictTypeChecked` + `stylisticTypeChecked` | Toutes les règles TypeScript avec analyse de types (ex. `no-floating-promises`, `no-unsafe-*`, `switch-exhaustiveness-check`) |
+| **Unicorn** | `eslint-plugin-unicorn` | `flat/recommended` | Meilleures pratiques JS/TS : APIs modernes, nommage, lisibilité |
+| **SonarJS** | `eslint-plugin-sonarjs` | `recommended` | Complexité cognitive, code dupliqué, bugs courants |
+
+### Règles notables ajoutées
+
+- **`@typescript-eslint/consistent-type-imports`** — `import type` obligatoire pour les imports de types uniquement
+- **`@typescript-eslint/explicit-function-return-type`** — type de retour requis sur les fonctions exportées/publiques
+- **`@typescript-eslint/naming-convention`** — PascalCase pour interfaces/types/classes, camelCase pour variables/fonctions
+- **`@typescript-eslint/switch-exhaustiveness-check`** — switch sur un type union doit couvrir tous les cas
+- **`no-console`** — erreur (utiliser un logger ou `void` explicite dans les routes serveur)
+- **`no-param-reassign`** — interdiction de muter les paramètres de fonction
+- **`unicorn/prevent-abbreviations`** — nommage descriptif (exceptions : `props`, `ref`, `req`, `res`, `err`, `ctx`, `docs`, `utils`…)
+
+### Analyse de types (type-aware linting)
+
+Les règles `*TypeChecked` nécessitent l'intégration avec `tsc`. Le parser options `projectService: true` est activé pour tous les fichiers `.ts` / `.tsx`, ce qui permet à ESLint d'utiliser les informations de type réelles. Cela peut allonger le temps de lint (~2-5 s sur ce projet).
+
+---
+
 ## Optimisations de performance (Vercel React Best Practices)
 
 Les règles ci-dessous ont été appliquées sur l'ensemble de la codebase (`vercel-react-best-practices` v1.0.0, février 2026).
