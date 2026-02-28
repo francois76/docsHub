@@ -140,108 +140,65 @@ export class GitHubReviewProvider implements ReviewProvider {
   ): Promise<ReviewComment> {
     const displayBody = this.userName ? `**[${this.userName}]:** ${body}` : body;
 
-    // Fetch the PR node_id needed by the GraphQL API
+    // Fetch the PR to get the head commit SHA (required for review creation).
     const prData = await this.request<any>(`/repos/${repo}/pulls/${prNumber}`);
+    const sha = commitSha ?? prData.head.sha;
 
-    const graphqlUrl = this.baseUrl.replace(/\/api\/v3\/?$/, "/api/graphql")
-      .replace(/^(https:\/\/api\.github\.com)\/?$/, "$1/graphql");
+    try {
+      // Create an inline comment as part of an immediately-submitted COMMENT review.
+      // Unlike addPullRequestReviewThread (GraphQL), this does NOT create a pending
+      // review — the comment is immediately visible via the REST API on refresh.
+      const review = await this.request<any>(
+        `/repos/${repo}/pulls/${prNumber}/reviews`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            commit_id: sha,
+            body: "",
+            event: "COMMENT",
+            comments: [{ path: filePath, line, body: displayBody, side: "RIGHT" }],
+          }),
+        }
+      );
 
-    // Try line-level comment first (works if the line is in a diff hunk).
-    const node = await this.graphqlCreateThread(graphqlUrl, prData.node_id, {
-      body: displayBody,
-      path: filePath,
-      line,
-      side: "RIGHT",
-      subjectType: "LINE",
-    });
-
-    if (node) {
+      // Retrieve the individual comment to get its id and metadata.
+      const reviewComments = await this.request<any[]>(
+        `/repos/${repo}/pulls/${prNumber}/reviews/${review.id}/comments`
+      );
+      const c = reviewComments[0];
       return {
-        id: node.databaseId,
-        author: node.author?.login ?? "unknown",
-        body: node.body,
-        createdAt: node.createdAt,
-        path: node.path ?? filePath,
-        line: node.line ?? line,
+        id: c?.id ?? review.id,
+        author: c?.user?.login ?? review.user?.login ?? "unknown",
+        body: displayBody,
+        createdAt: c?.created_at ?? review.submitted_at,
+        path: filePath,
+        line,
         isOwn: true,
+        commentType: "review_comment",
+      };
+    } catch {
+      // Fallback: line is not in the diff hunk → post as a regular issue comment
+      // with embedded markers so docsHub can display it inline.
+      const fallbackBody =
+        `${displayBody}\n\n` +
+        `> 📄 \`${filePath}\` — ligne ${line}\n` +
+        `<!-- docshub:path=${filePath} -->\n` +
+        `<!-- docshub:line=${line} -->`;
+      const ic = await this.request<any>(
+        `/repos/${repo}/issues/${prNumber}/comments`,
+        { method: "POST", body: JSON.stringify({ body: fallbackBody }) }
+      );
+      return {
+        id: ic.id,
+        author: ic.user?.login ?? "unknown",
+        body: displayBody,
+        createdAt: ic.created_at,
+        path: filePath,
+        line,
+        isOwn: true,
+        commentType: "issue_comment",
       };
     }
-
-    // Fallback: post as a regular issue comment with embedded markers.
-    // GraphQL FILE-level threads are pending until a review is submitted,
-    // so they are not reliably returned by the REST comments endpoint on refresh.
-    // An issue comment is always immediately visible.
-    const fallbackBody =
-      `${displayBody}\n\n` +
-      `> 📄 \`${filePath}\` — ligne ${line}\n` +
-      `<!-- docshub:path=${filePath} -->\n` +
-      `<!-- docshub:line=${line} -->`;
-    const ic = await this.request<any>(
-      `/repos/${repo}/issues/${prNumber}/comments`,
-      { method: "POST", body: JSON.stringify({ body: fallbackBody }) }
-    );
-    return {
-      id: ic.id,
-      author: ic.user?.login ?? "unknown",
-      // Return clean body (without markers) to the caller.
-      body: displayBody,
-      createdAt: ic.created_at,
-      path: filePath,
-      line,
-      isOwn: true,
-    };
-  }
-
-  /**
-   * Create a review thread via the GitHub GraphQL API.
-   * Returns the first comment node, or null if `thread` came back null
-   * (which means GitHub couldn't resolve the target).
-   */
-  private async graphqlCreateThread(
-    graphqlUrl: string,
-    pullRequestNodeId: string,
-    input: Record<string, unknown>
-  ): Promise<any | null> {
-    const res = await fetch(graphqlUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query: `
-          mutation($input: AddPullRequestReviewThreadInput!) {
-            addPullRequestReviewThread(input: $input) {
-              thread {
-                comments(first: 1) {
-                  nodes {
-                    databaseId
-                    author { login }
-                    body
-                    createdAt
-                    path
-                    line
-                  }
-                }
-              }
-            }
-          }`,
-        variables: {
-          input: {
-            pullRequestId: pullRequestNodeId,
-            ...input,
-          },
-        },
-      }),
-    });
-
-    const json = await res.json();
-
-    if (json.errors?.length) {
-      throw new Error(json.errors.map((e: any) => e.message).join("; "));
-    }
-
-    return json.data?.addPullRequestReviewThread?.thread?.comments?.nodes?.[0] ?? null;
   }
 
   async submitReview(

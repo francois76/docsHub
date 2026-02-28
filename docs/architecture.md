@@ -26,6 +26,7 @@ flowchart TD
             ABR["/api/repos/[repo]/branches"]
             ATR["/api/repos/[repo]/tree"]
             AF["/api/repos/[repo]/file"]
+            AH["/api/repos/[repo]/headings"]
             AS["/api/repos/[repo]/sync"]
             AAS["/api/repos/[repo]/[branch]/assets/[...path]"]
             ARV["/api/reviews/[repo]"]
@@ -93,9 +94,9 @@ graph TD
     LP["layout.tsx\n(root layout)"] --> AP["AuthProvider"]
     AP --> BL["[branch]/layout.tsx"]
     BL --> TB["TopBar\n(repo + branch selectors, sync,\nbarre de progression, modal erreur)"]
-    BL --> DS["DocsSidebar\n(file tree)"]
     BL --> RP["ReviewProvider\n(contexte React — état revue)"]
 
+    RP --> DS["DocsSidebar\n(tree + titres H1-H3\n+ badges commentaires)"]
     RP --> MAIN["main (zone de contenu)"]
     RP --> RB["ReviewBar\n(barre de revue en bas)"]
 
@@ -109,6 +110,7 @@ graph TD
     TB -->|"GET /api/repos/{repo}/branches"| API2["API: branches"]
     TB -->|"POST /api/repos/{repo}/sync"| API3["API: sync"]
     DS -->|"GET /api/repos/{repo}/tree"| API4["API: file tree"]
+    DS -->|"GET /api/repos/{repo}/headings"| API6["API: headings batch"]
     RP -->|"GET+POST /api/reviews/{repo}"| API5["API: reviews"]
 ```
 
@@ -214,9 +216,33 @@ Les règles ci-dessous ont été appliquées sur l'ensemble de la codebase (`ver
 | **rendering-animate-svg-wrapper** | `TopBar.tsx` | La classe `animate-spin` est appliquée sur un `<div>` wrapper plutôt que directement sur le SVG `<RefreshCw>`, permettant l'accélération GPU |
 | **js-hoist-regexp** | `[...path]/page.tsx` | La regex `/\.(md\|mdx\|markdown)$/i` est hoistée au niveau module pour éviter sa recréation à chaque appel |
 | **js-tosorted-immutable** | `git-service.ts`, `github-provider.ts`, `gitlab-provider.ts`, `bitbucket-provider.ts` | Remplacement de `.sort()` (mutation in-place) par `.toSorted()` (immutable), ce qui protège les arrays partagés de mutations silencieuses |
-| **rerender-lazy-state-init** | `DocsSidebar.tsx` → `TreeNode` | `useState(() => activePath ? isAncestorOf(...) : depth === 0)` — l'initializer en forme de fonction évite que la traversée d'arbre s'exécute à chaque re-render de chaque nœud |
+| **rerender-lazy-state-init** | `DocsSidebar.tsx` → `TreeNode`, `H2Group`, `FileNode` | `useState(() => ...)` — les initialiseurs de lazy state évitent les calculs coûteux (traversée d'arbre, état actif) à chaque re-render |
 | **advanced-event-handler-refs** | `MarkdownViewer.tsx` → `InlineCommentWidget`, `ConfirmModal` | Handlers `keydown` (touche Escape) stockés dans une `ref` : la souscription est stable, plus de `eslint-disable-next-line`, plus de risque de stale closure |
 | **rendering-conditional-render** | `MarkdownViewer.tsx` | Remplacement du `&&`-chain incluant `filePath` (string pouvant être `""`) par un ternaire explicite `? createPortal(...) : null` |
+
+---
+
+## Navigation par titres dans la sidebar
+
+`DocsSidebar` offre une navigation arborescente enrichie pour les fichiers Markdown :
+
+1. **Titre H1 comme libellé** — si le fichier a un titre de niveau 1, il remplace le nom du fichier dans la sidebar.
+2. **Arbre H2 / H3** — chaque fichier dispose d'un chevron permettant de déplier ses titres de niveau 2 et 3. Le fichier actif se déplie automatiquement.
+3. **Navigation par ancre** — cliquer sur un titre H2 ou H3 :
+   - si le fichier est déjà ouvert → scroll smooth vers l'ancre (`document.getElementById(slug).scrollIntoView`)
+   - sinon → navigation vers `<href>#<slug>` (le slug est généré de manière compatible GitHub)
+4. **Badges de commentaires (revue)** — quand une PR est ouverte, un badge `<MessageSquare count>` apparaît à côté de chaque item :
+   - **Fichier** : total des commentaires pour ce fichier
+   - **H2** : commentaires dont la ligne source appartient à la section H2 (inclut les H3 sous-jacents)
+   - **H3** : commentaires dont la ligne source appartient à la section H3
+
+L'algorithme d'agrégation des commentaires parcourt les titres à rebours depuis la ligne du commentaire pour identifier le titre le plus proche et ses ancêtres (même logique que la détection de section GitHub).
+
+### API `/api/repos/[repo]/headings`
+
+`GET /api/repos/[repo]/headings?branch=<b>&paths=<p1,p2,...>`
+
+Retourne `{ headings: { "<path>": HeadingInfo[] } }` pour un batch de fichiers Markdown. Les slugs générés utilisent la même fonction `slugifyHeading` que le renderer `markdown-it`, garantissant la cohérence des ancres HTML et des liens sidebar.
 
 ---
 

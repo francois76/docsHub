@@ -32,21 +32,21 @@ export default async function BranchLayout({ params, children }: Props) {
   return (
     <div className="flex flex-col h-screen overflow-hidden">
       <TopBar currentRepo={repoName} currentBranch={branchName} />
-      <div className="flex flex-1 overflow-hidden">
-        <DocsSidebar repo={repoName} branch={branchName} />
-        <ReviewProvider
-          repo={repoName}
-          branch={branchName}
-          repoType={repoType}
-          authMode={authMode}
-          defaultBranch={defaultBranch}
-        >
+      <ReviewProvider
+        repo={repoName}
+        branch={branchName}
+        repoType={repoType}
+        authMode={authMode}
+        defaultBranch={defaultBranch}
+      >
+        <div className="flex flex-1 overflow-hidden">
+          <DocsSidebar repo={repoName} branch={branchName} />
           <div className="flex-1 flex flex-col overflow-hidden">
             <main className="flex-1 overflow-auto">{children}</main>
             <ReviewBar />
           </div>
-        </ReviewProvider>
-      </div>
+        </div>
+      </ReviewProvider>
     </div>
   );
 }

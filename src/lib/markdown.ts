@@ -2,6 +2,7 @@ import MarkdownIt from "markdown-it";
 import type Token from "markdown-it/lib/token.mjs";
 import type Renderer from "markdown-it/lib/renderer.mjs";
 import { createHighlighter } from "shiki";
+import type { HeadingInfo } from "@/types/git";
 
 let markdownInstance: MarkdownIt | null = null;
 let highlighterReady = false;
@@ -73,6 +74,34 @@ async function getMarkdown(_repoName: string, _branch: string): Promise<Markdown
       // Fallback: plain code block
       return `<pre class="shiki"><code>${instance.utils.escapeHtml(code)}</code></pre>`;
     },
+  });
+
+  // ── Add `id` attributes to headings for anchor navigation ────
+  // This core rule runs once per document so the slug-dedup map is fresh
+  // for every render call. The slugs are kept in sync with extractHeadings().
+  instance.core.ruler.push("heading_ids", (state) => {
+    const slugCount = new Map<string, number>();
+
+    for (let i = 0; i < state.tokens.length; i++) {
+      const token = state.tokens[i];
+      if (token.type !== "heading_open") continue;
+
+      const inlineToken = state.tokens[i + 1];
+      if (!inlineToken || inlineToken.type !== "inline") continue;
+
+      // Collect plain text from inline children (text + code_inline)
+      const plainText = (inlineToken.children ?? [])
+        .filter((t) => t.type === "text" || t.type === "code_inline")
+        .map((t) => t.content)
+        .join("");
+
+      let slug = slugifyHeading(plainText);
+      const count = slugCount.get(slug) ?? 0;
+      const finalSlug = count === 0 ? slug : `${slug}-${count}`;
+      slugCount.set(slug, count + 1);
+
+      token.attrSet("id", finalSlug);
+    }
   });
 
   // ── Plugin: annotate block-level opening tags with source line info ──
@@ -170,4 +199,56 @@ export async function renderMarkdown(
 ): Promise<string> {
   const md = await getMarkdown(options.repoName, options.branch);
   return md.render(content, options);
+}
+
+/* ────────────────────────────────────────────────────────────── */
+/*  Heading extraction                                            */
+/* ────────────────────────────────────────────────────────────── */
+
+/**
+ * Produces a GitHub-compatible anchor slug from a heading text.
+ * Lowercases, removes non-word chars (except spaces/hyphens), trims,
+ * and replaces spaces with hyphens.
+ */
+export function slugifyHeading(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
+/**
+ * Extracts headings of level 1–3 from markdown source, with 1-based
+ * line numbers so callers can map inline review comments to sections.
+ */
+export function extractHeadings(markdown: string): HeadingInfo[] {
+  const lines = markdown.split("\n");
+  const result: HeadingInfo[] = [];
+  const slugCount = new Map<string, number>();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = /^(#{1,3})\s+(.+)$/.exec(line);
+    if (!match) continue;
+
+    const level = match[1].length;
+    // Strip inline markdown (bold, italic, code, links) from heading text
+    const raw = match[2]
+      .replace(/`[^`]*`/g, (m) => m.slice(1, -1))
+      .replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1")
+      .replace(/_{1,2}([^_]+)_{1,2}/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .trim();
+
+    let slug = slugifyHeading(raw);
+    // Deduplicate slugs the same way GitHub does (append -1, -2, …)
+    const count = slugCount.get(slug) ?? 0;
+    slug = count === 0 ? slug : `${slug}-${count}`;
+    slugCount.set(slug, count + 1);
+
+    result.push({ level, text: raw, slug, line: i + 1 });
+  }
+
+  return result;
 }

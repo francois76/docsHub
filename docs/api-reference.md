@@ -320,10 +320,13 @@ Poste une action de revue sur une PR (commentaire global, commentaire inline, ap
 
 > **Commentaires inline GitHub**
 >
-> Les commentaires inline utilisent la mutation GraphQL `addPullRequestReviewThread`.
-> Si la ligne ciblée est dans le diff, le commentaire s'affiche directement sur la ligne dans « Files changed ».
-> Si la ligne est hors du diff (limitation des API publiques GitHub — l'UI web utilise une API interne),
-> le commentaire est rattaché au fichier dans « Files changed » avec la référence `📄 fichier:ligne` dans le corps.
+> Les commentaires inline utilisent `POST /pulls/{prNumber}/reviews` avec `event: "COMMENT"` pour créer et soumettre
+> immédiatement une review inline. Contrairement à la mutation GraphQL `addPullRequestReviewThread` (qui crée une review
+> en état *pending* non retournée par l'API REST au rechargement), cette approche garantit que le commentaire est
+> immédiatement visible via `GET /pulls/{prNumber}/comments`.
+> Si la ligne ciblée **est dans le diff**, le commentaire s'affiche directement sur la ligne dans « Files changed ».
+> Si la ligne **est hors du diff** (limitation des API publiques GitHub), le commentaire est posté comme issue comment
+> avec des marqueurs `<!-- docshub:path -->` / `<!-- docshub:line -->` pour reconstituer sa position inline dans docsHub.
 
 ---
 
