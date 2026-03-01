@@ -1,10 +1,33 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/restrict-template-expressions, @typescript-eslint/no-misused-spread, sonarjs/no-nested-template-literals, no-nested-ternary, sonarjs/no-nested-conditional */
 import type {
   ReviewProvider,
   ReviewComment,
   PullRequest,
   SubmitReviewPayload,
 } from "./types";
+
+// ── GitHub REST API shapes ───────────────────────────────────────────────────
+interface GitHubUser { login?: string }
+interface GitHubPRRef { ref: string; sha: string }
+interface GitHubPullRequest {
+  id: number; number: number; title: string;
+  state: "open" | "closed" | "merged";
+  head: GitHubPRRef; base: GitHubPRRef; html_url: string;
+  user?: GitHubUser;
+}
+interface GitHubIssueComment {
+  id: number; body?: string; created_at: string; user?: GitHubUser;
+}
+interface GitHubReviewComment {
+  id: number; body?: string; created_at: string; user?: GitHubUser;
+  path?: string; line?: number; original_line?: number;
+}
+interface GitHubReview { id: number; submitted_at: string; user?: GitHubUser }
+
+interface ApiOptions {
+  method?: string;
+  body?: string;
+  headers?: Record<string, string>;
+}
 
 export class GitHubReviewProvider implements ReviewProvider {
   private token: string;
@@ -17,9 +40,10 @@ export class GitHubReviewProvider implements ReviewProvider {
     this.userName = userName;
   }
 
-  private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(path: string, options: ApiOptions = {}): Promise<T> {
     const res = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
+      method: options.method,
+      body: options.body,
       headers: {
         Authorization: `Bearer ${this.token}`,
         Accept: "application/vnd.github.v3+json",
@@ -30,7 +54,7 @@ export class GitHubReviewProvider implements ReviewProvider {
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`GitHub API error ${res.status}: ${text}`);
+      throw new Error(`GitHub API error ${String(res.status)}: ${text}`);
     }
 
     return res.json() as Promise<T>;
@@ -46,14 +70,15 @@ export class GitHubReviewProvider implements ReviewProvider {
     });
     if (!res.ok && res.status !== 204) {
       const text = await res.text();
-      throw new Error(`GitHub API error ${res.status}: ${text}`);
+      throw new Error(`GitHub API error ${String(res.status)}: ${text}`);
     }
   }
 
   async findPR(repo: string, headBranch: string): Promise<PullRequest | null> {
     const owner = repo.split('/')[0];
-    const prs = await this.request<any[]>(
-      `/repos/${repo}/pulls?state=open&head=${encodeURIComponent(`${owner}:${headBranch}`)}&per_page=5`
+    const headRef = `${owner}:${headBranch}`;
+    const prs = await this.request<GitHubPullRequest[]>(
+      `/repos/${repo}/pulls?state=open&head=${encodeURIComponent(headRef)}&per_page=5`
     );
     if (prs.length === 0) return null;
     const pr = prs[0];
@@ -70,11 +95,11 @@ export class GitHubReviewProvider implements ReviewProvider {
 
   async listComments(repo: string, prNumber: number): Promise<ReviewComment[]> {
     const [issueComments, reviewComments] = await Promise.all([
-      this.request<any[]>(`/repos/${repo}/issues/${prNumber}/comments?per_page=100`),
-      this.request<any[]>(`/repos/${repo}/pulls/${prNumber}/comments?per_page=100`),
+      this.request<GitHubIssueComment[]>(`/repos/${repo}/issues/${String(prNumber)}/comments?per_page=100`),
+      this.request<GitHubReviewComment[]>(`/repos/${repo}/pulls/${String(prNumber)}/comments?per_page=100`),
     ]);
 
-    const toComment = (c: any, inline = false): ReviewComment => {
+    const toComment = (c: GitHubIssueComment | GitHubReviewComment, inline = false): ReviewComment => {
       const rawBody: string = c.body ?? "";
       // Parse hidden markers embedded in fallback issue comments.
       const lineMatch = /\n?<!-- docshub:line=(\d+) -->/.exec(rawBody);
@@ -88,15 +113,22 @@ export class GitHubReviewProvider implements ReviewProvider {
         .trimEnd();
       // Issue comment with embedded markers acts as an inline comment.
       const isEmbedded = !inline && Boolean(docshubLine) && Boolean(docshubPath);
+      let commentPath: string | undefined;
+      let commentLine: number | undefined;
+      if (inline) {
+        commentPath = (c as GitHubReviewComment).path;
+        commentLine = (c as GitHubReviewComment).line ?? (c as GitHubReviewComment).original_line ?? docshubLine;
+      } else if (isEmbedded) {
+        commentPath = docshubPath;
+        commentLine = docshubLine;
+      }
       return {
         id: c.id,
         author: c.user?.login ?? "unknown",
         body,
         createdAt: c.created_at,
-        path: inline ? c.path : (isEmbedded ? docshubPath : undefined),
-        line: inline
-          ? (c.line ?? c.original_line ?? docshubLine)
-          : (isEmbedded ? docshubLine : undefined),
+        path: commentPath,
+        line: commentLine,
         isOwn: this.userName ? c.user?.login === this.userName : false,
         commentType: inline ? "review_comment" : "issue_comment",
       };
@@ -118,14 +150,14 @@ export class GitHubReviewProvider implements ReviewProvider {
     body: string
   ): Promise<ReviewComment> {
     const displayBody = this.userName ? `**[${this.userName}]:** ${body}` : body;
-    const c = await this.request<any>(
-      `/repos/${repo}/issues/${prNumber}/comments`,
+    const c = await this.request<GitHubIssueComment>(
+      `/repos/${repo}/issues/${String(prNumber)}/comments`,
       { method: "POST", body: JSON.stringify({ body: displayBody }) }
     );
     return {
       id: c.id,
       author: c.user?.login ?? "unknown",
-      body: c.body,
+      body: c.body ?? "",
       createdAt: c.created_at,
       isOwn: true,
     };
@@ -142,15 +174,15 @@ export class GitHubReviewProvider implements ReviewProvider {
     const displayBody = this.userName ? `**[${this.userName}]:** ${body}` : body;
 
     // Fetch the PR to get the head commit SHA (required for review creation).
-    const prData = await this.request<any>(`/repos/${repo}/pulls/${prNumber}`);
+    const prData = await this.request<GitHubPullRequest>(`/repos/${repo}/pulls/${String(prNumber)}`);
     const sha = commitSha ?? prData.head.sha;
 
     try {
       // Create an inline comment as part of an immediately-submitted COMMENT review.
       // Unlike addPullRequestReviewThread (GraphQL), this does NOT create a pending
       // review — the comment is immediately visible via the REST API on refresh.
-      const review = await this.request<any>(
-        `/repos/${repo}/pulls/${prNumber}/reviews`,
+      const review = await this.request<GitHubReview>(
+        `/repos/${repo}/pulls/${String(prNumber)}/reviews`,
         {
           method: "POST",
           body: JSON.stringify({
@@ -163,10 +195,10 @@ export class GitHubReviewProvider implements ReviewProvider {
       );
 
       // Retrieve the individual comment to get its id and metadata.
-      const reviewComments = await this.request<any[]>(
-        `/repos/${repo}/pulls/${prNumber}/reviews/${review.id}/comments`
+      const reviewComments = await this.request<GitHubReviewComment[]>(
+        `/repos/${repo}/pulls/${String(prNumber)}/reviews/${String(review.id)}/comments`
       );
-      const c = reviewComments[0];
+      const c = reviewComments.at(0);
       return {
         id: c?.id ?? review.id,
         author: c?.user?.login ?? review.user?.login ?? "unknown",
@@ -180,13 +212,10 @@ export class GitHubReviewProvider implements ReviewProvider {
     } catch {
       // Fallback: line is not in the diff hunk → post as a regular issue comment
       // with embedded markers so docsHub can display it inline.
-      const fallbackBody =
-        `${displayBody}\n\n` +
-        `> 📄 \`${filePath}\` — ligne ${line}\n` +
-        `<!-- docshub:path=${filePath} -->\n` +
-        `<!-- docshub:line=${line} -->`;
-      const ic = await this.request<any>(
-        `/repos/${repo}/issues/${prNumber}/comments`,
+      const backtick = "`";
+      const fallbackBody = `${displayBody}\n\n> 📄 ${backtick}${filePath}${backtick} — ligne ${String(line)}\n<!-- docshub:path=${filePath} -->\n<!-- docshub:line=${String(line)} -->`;
+      const ic = await this.request<GitHubIssueComment>(
+        `/repos/${repo}/issues/${String(prNumber)}/comments`,
         { method: "POST", body: JSON.stringify({ body: fallbackBody }) }
       );
       return {
@@ -213,7 +242,7 @@ export class GitHubReviewProvider implements ReviewProvider {
       comment: "COMMENT",
     };
 
-    await this.request(`/repos/${repo}/pulls/${prNumber}/reviews`, {
+    await this.request(`/repos/${repo}/pulls/${String(prNumber)}/reviews`, {
       method: "POST",
       body: JSON.stringify({
         body: payload.body ?? "",
@@ -234,7 +263,7 @@ export class GitHubReviewProvider implements ReviewProvider {
     baseBranch: string,
     title?: string
   ): Promise<PullRequest> {
-    const pr = await this.request<any>(`/repos/${repo}/pulls`, {
+    const pr = await this.request<GitHubPullRequest>(`/repos/${repo}/pulls`, {
       method: "POST",
       body: JSON.stringify({
         title: title ?? `Documentation review: ${headBranch}`,
@@ -259,14 +288,14 @@ export class GitHubReviewProvider implements ReviewProvider {
     commentType?: string
   ): Promise<void> {
     if (commentType === "issue_comment") {
-      await this.requestDelete(`/repos/${repo}/issues/comments/${commentId}`);
+      await this.requestDelete(`/repos/${repo}/issues/comments/${String(commentId)}`);
       return;
     }
     // Try review comment first; fall back to issue comment if 404/error.
     try {
-      await this.requestDelete(`/repos/${repo}/pulls/comments/${commentId}`);
+      await this.requestDelete(`/repos/${repo}/pulls/comments/${String(commentId)}`);
     } catch {
-      await this.requestDelete(`/repos/${repo}/issues/comments/${commentId}`);
+      await this.requestDelete(`/repos/${repo}/issues/comments/${String(commentId)}`);
     }
   }
 }
