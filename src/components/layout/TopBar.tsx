@@ -30,7 +30,7 @@ interface ReposResponse { repos?: Repo[] }
 interface BranchesResponse { branches?: { name: string }[]; error?: string; hint?: string }
 interface SyncResponse { error?: string }
 
-export function TopBar({ currentRepo, currentBranch, onSync }: Props) {
+export function TopBar({ currentRepo, currentBranch, onSync }: Props): React.JSX.Element {
   const router = useRouter();
   const [repos, setRepos] = useState<Repo[]>([]);
   const [branches, setBranches] = useState<{ name: string }[]>([]);
@@ -61,20 +61,20 @@ export function TopBar({ currentRepo, currentBranch, onSync }: Props) {
     loadBranches();
   }, [loadBranches]);
 
-  const handleRepoChange = (name: string) => {
+  const handleRepoChange = (name: string): void => {
     const repo = repos.find((r) => r.name === name);
     router.push(
       `/docs/${encodeURIComponent(name)}/${repo?.defaultBranch ?? "main"}`
     );
   };
 
-  const handleBranchChange = (branch: string) => {
+  const handleBranchChange = (branch: string): void => {
     router.push(
       `/docs/${encodeURIComponent(currentRepo)}/${encodeURIComponent(branch)}`
     );
   };
 
-  const handleSync = async () => {
+  const handleSync = async (): Promise<void> => {
     setSyncing(true);
     setSyncError(null);
     try {

@@ -33,7 +33,7 @@ interface Props {
   readonly filePath?: string;
 }
 
-export function ReviewPanel({ repo, branch }: Props) {
+export function ReviewPanel({ repo, branch }: Props): React.JSX.Element {
   const { data: session } = useSession();
   const [pr, setPr] = useState<PullRequest | null>(null);
   const [comments, setComments] = useState<ReviewComment[]>([]);
@@ -57,7 +57,7 @@ export function ReviewPanel({ repo, branch }: Props) {
       .finally(() => { setLoading(false); });
   }, [repo, branch]);
 
-  const submitComment = async () => {
+  const submitComment = async (): Promise<void> => {
     if (!pr || !comment.trim()) return;
     setSubmitting(true);
     try {
@@ -82,7 +82,7 @@ export function ReviewPanel({ repo, branch }: Props) {
     }
   };
 
-  const submitReview = async (action: "approve" | "request_changes") => {
+  const submitReview = async (action: "approve" | "request_changes"): Promise<void> => {
     if (!pr) return;
     setSubmitting(true);
     try {
@@ -263,7 +263,7 @@ export function ReviewPanel({ repo, branch }: Props) {
   );
 }
 
-function CommentCard({ comment }: { readonly comment: ReviewComment }) {
+function CommentCard({ comment }: { readonly comment: ReviewComment }): React.JSX.Element {
   return (
     <div
       className={cn(

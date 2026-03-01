@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getGitService } from "@/lib/git-registry";
 import { renderMarkdown } from "@/lib/markdown";
@@ -11,13 +12,13 @@ interface Props {
   readonly params: Promise<{ readonly repo: string; readonly branch: string; readonly path: string[] }>;
 }
 
-export async function generateMetadata({ params }: Props) {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { path } = await params;
   const fileName = decodeURIComponent(path.at(-1) ?? "");
   return { title: `${fileName} — docsHub` };
 }
 
-export default async function DocFilePage({ params }: Props) {
+export default async function DocFilePage({ params }: Props): Promise<React.JSX.Element> {
   const { repo, branch, path: pathSegments } = await params;
   const repoName = decodeURIComponent(repo);
   const branchName = decodeURIComponent(branch);

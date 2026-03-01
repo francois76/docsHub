@@ -5,7 +5,7 @@ import { getConfig, getRepoConfig } from "@/lib/config";
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ repo: string }> }
-) {
+): Promise<Response> {
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
 

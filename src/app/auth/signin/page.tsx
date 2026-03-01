@@ -74,7 +74,7 @@ function SignInContent(): React.JSX.Element {
   );
 }
 
-export default function SignInPage() {
+export default function SignInPage(): React.JSX.Element {
   return (
     <Suspense
       fallback={

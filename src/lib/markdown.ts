@@ -8,7 +8,7 @@ let markdownInstance: MarkdownIt | null = null;
 let highlighterReady = false;
 
 /** Call this when renderer rules change (e.g. hot reload in dev). */
-export function resetMarkdownInstance() {
+export function resetMarkdownInstance(): void {
   markdownInstance = null;
   highlighterReady = false;
 }

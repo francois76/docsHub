@@ -10,7 +10,7 @@ interface Props {
   readonly children: React.ReactNode;
 }
 
-export default async function BranchLayout({ params, children }: Props) {
+export default async function BranchLayout({ params, children }: Props): Promise<React.JSX.Element> {
   const { repo, branch } = await params;
   const repoName = decodeURIComponent(repo);
   const branchName = decodeURIComponent(branch);

@@ -9,7 +9,7 @@ const MARKDOWN_FILE_RE = /\.(md|mdx|markdown)$/i;
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ repo: string }> }
-) {
+): Promise<Response> {
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
   const { searchParams } = new URL(req.url);

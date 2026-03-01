@@ -30,7 +30,7 @@ export async function getConfig(): Promise<DocsHubConfig> {
 }
 
 /** Bust the config cache (e.g. after hot reload in dev) */
-export function resetConfigCache() {
+export function resetConfigCache(): void {
   cachedConfig = null;
 }
 

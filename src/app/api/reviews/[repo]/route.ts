@@ -24,7 +24,7 @@ interface DeleteBody {
 }
 
 /** Fields included in every GET response so the client knows the repo context */
-function repoMeta(repoConfig: { type: string; authMode?: string; defaultBranch?: string }) {
+function repoMeta(repoConfig: { type: string; authMode?: string; defaultBranch?: string }): { authMode: string; repoType: string; defaultBranch: string } {
   return {
     authMode: repoConfig.authMode ?? "token",
     repoType: repoConfig.type,
@@ -35,7 +35,7 @@ function repoMeta(repoConfig: { type: string; authMode?: string; defaultBranch?:
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ repo: string }> }
-) {
+): Promise<Response> {
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
   const { searchParams } = new URL(req.url);
@@ -85,7 +85,7 @@ export async function GET(
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ repo: string }> }
-) {
+): Promise<Response> {
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
   const body = await req.json() as PostBody;
@@ -159,7 +159,7 @@ export async function POST(
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ repo: string }> }
-) {
+): Promise<Response> {
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
   const body = await req.json() as DeleteBody;

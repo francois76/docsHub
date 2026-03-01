@@ -57,7 +57,7 @@ interface ActiveLine {
   rowEl: HTMLElement | null;
 }
 
-export function MarkdownViewer({ html, filePath }: Props) {
+export function MarkdownViewer({ html, filePath }: Props): React.JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const review = useReview();
   const isReviewMode = Boolean(review?.pr && filePath);
@@ -84,7 +84,7 @@ export function MarkdownViewer({ html, filePath }: Props) {
     let cancelled = false;
     let overlay: HTMLDivElement | null = null;
 
-    function openFullscreen(svgHtml: string) {
+    function openFullscreen(svgHtml: string): void {
       overlay = document.createElement("div");
       overlay.className = "mermaid-fullscreen-overlay";
       overlay.innerHTML = `
@@ -102,19 +102,19 @@ export function MarkdownViewer({ html, filePath }: Props) {
         ?.addEventListener("click", closeFullscreen);
     }
 
-    function closeFullscreen() {
+    function closeFullscreen(): void {
       if (overlay?.parentNode) {
         overlay.remove();
         overlay = null;
       }
     }
 
-    function handleKeyDown(keyboardEvent: KeyboardEvent) {
+    function handleKeyDown(keyboardEvent: KeyboardEvent): void {
       if (keyboardEvent.key === "Escape" && overlay) closeFullscreen();
     }
     globalThis.addEventListener("keydown", handleKeyDown);
 
-    async function renderMermaid() {
+    async function renderMermaid(): Promise<void> {
       const mermaidModule = await import("mermaid");
       const mermaid = mermaidModule.default;
       mermaid.initialize({
@@ -266,8 +266,8 @@ export function MarkdownViewer({ html, filePath }: Props) {
         cleanups.push(() => { cancelAnimationFrame(rafId); });
 
         for (const [element, button] of buttonMap) {
-          const onEnter = () => { button.classList.add("review-line-plus--row-hover"); };
-          const onLeave = () => { button.classList.remove("review-line-plus--row-hover"); };
+          const onEnter = (): void => { button.classList.add("review-line-plus--row-hover"); };
+          const onLeave = (): void => { button.classList.remove("review-line-plus--row-hover"); };
           element.addEventListener("mouseenter", onEnter);
           element.addEventListener("mouseleave", onLeave);
           cleanups.push(() => {
@@ -366,7 +366,7 @@ function InlineCommentWidget({
   readonly line: number;
   readonly filePath: string;
   readonly onClose: () => void;
-}) {
+}): React.JSX.Element {
   const review = useReview();
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -384,7 +384,7 @@ function InlineCommentWidget({
   useEffect(() => { onCloseRef.current = onClose; });
 
   useEffect(() => {
-    const handle = (keyboardEvent: KeyboardEvent) => {
+    const handle = (keyboardEvent: KeyboardEvent): void => {
       if (keyboardEvent.key === "Escape") {
         keyboardEvent.stopPropagation();
         onCloseRef.current();
@@ -394,7 +394,7 @@ function InlineCommentWidget({
     return () => { document.removeEventListener("keydown", handle); };
   }, []); // stable subscription — no dep on onClose
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (): Promise<void> => {
     if (!body.trim() || !review) return;
     setSubmitting(true);
     await review.addInlineComment(filePath, line, body.trim());
@@ -402,7 +402,7 @@ function InlineCommentWidget({
     setSubmitting(false);
   };
 
-  const handleDelete = async (id: string | number, cType?: string) => {
+  const handleDelete = async (id: string | number, cType?: string): Promise<void> => {
     if (!review) return;
     await review.deleteComment(id, cType);
     setConfirmDeleteId(null);
@@ -512,14 +512,14 @@ function ConfirmModal({
   message: string;
   onConfirm: () => void;
   onCancel: () => void;
-}) {
+}): React.JSX.Element {
   // Rule advanced-event-handler-refs: store the callback in a ref so the
   // effect never needs to re-subscribe when onCancel identity changes.
   const onCancelRef = useRef(onCancel);
   useEffect(() => { onCancelRef.current = onCancel; });
 
   useEffect(() => {
-    const handle = (keyboardEvent: KeyboardEvent) => {
+    const handle = (keyboardEvent: KeyboardEvent): void => {
       if (keyboardEvent.key === "Escape") {
         keyboardEvent.stopPropagation();
         onCancelRef.current();

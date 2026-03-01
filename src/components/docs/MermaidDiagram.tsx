@@ -9,13 +9,13 @@ interface Props {
   readonly id: string;
 }
 
-function useMermaidRender(diagram: string, id: string, containerId: string) {
+function useMermaidRender(diagram: string, id: string, containerId: string): React.RefObject<HTMLDivElement> {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function render() {
+    async function render(): Promise<void> {
       if (!ref.current) return;
       try {
         const mermaidModule = await import("mermaid");
@@ -56,11 +56,11 @@ function FullscreenModal({
   diagram: string;
   id: string;
   onClose: () => void;
-}) {
+}): React.JSX.Element {
   const ref = useMermaidRender(diagram, id, `mermaid-fs-${id}`);
 
   useEffect(() => {
-    const handleKey = (keyboardEvent: KeyboardEvent) => {
+    const handleKey = (keyboardEvent: KeyboardEvent): void => {
       if (keyboardEvent.key === "Escape") onClose();
     };
     globalThis.addEventListener("keydown", handleKey);
@@ -94,7 +94,7 @@ function FullscreenModal({
   );
 }
 
-export function MermaidDiagram({ diagram, id }: Props) {
+export function MermaidDiagram({ diagram, id }: Props): React.JSX.Element {
   const ref = useMermaidRender(diagram, id, `mermaid-${id}`);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const openFullscreen = useCallback(() => { setIsFullscreen(true); }, []);

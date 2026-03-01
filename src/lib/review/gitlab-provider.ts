@@ -39,7 +39,7 @@ export class GitLabReviewProvider implements ReviewProvider {
     return res.json() as Promise<T>;
   }
 
-  private encodeRepo(repo: string) {
+  private encodeRepo(repo: string): string {
     return encodeURIComponent(repo);
   }
 

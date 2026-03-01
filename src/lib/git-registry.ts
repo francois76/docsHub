@@ -25,6 +25,6 @@ export async function getGitService(repoName: string): Promise<GitService> {
   return service;
 }
 
-export function clearGitServiceCache() {
+export function clearGitServiceCache(): void {
   instances.clear();
 }

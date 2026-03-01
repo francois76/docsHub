@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { useReview } from "./ReviewContext";
 import type { ReviewComment } from "@/lib/review/types";
 
-export function ReviewBar() {
+export function ReviewBar(): React.JSX.Element | null {
   const review = useReview();
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -99,7 +99,7 @@ export function ReviewBar() {
   const globalComments = review.comments.filter((c) => !c.path);
   const inlineCount = review.comments.filter((c) => Boolean(c.path)).length;
 
-  const handleSubmitComment = async () => {
+  const handleSubmitComment = async (): Promise<void> => {
     if (!comment.trim()) return;
     setSubmitting(true);
     await review.addComment(comment.trim());
@@ -107,7 +107,7 @@ export function ReviewBar() {
     setSubmitting(false);
   };
 
-  const handleReview = async (action: "approve" | "request_changes") => {
+  const handleReview = async (action: "approve" | "request_changes"): Promise<void> => {
     setSubmitting(true);
     await review.submitReview(action, comment.trim() || undefined);
     setComment("");
@@ -219,7 +219,7 @@ export function ReviewBar() {
   );
 }
 
-function GlobalCommentCard({ comment }: { readonly comment: ReviewComment }) {
+function GlobalCommentCard({ comment }: { readonly comment: ReviewComment }): React.JSX.Element {
   return (
     <div
       className={cn(

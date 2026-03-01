@@ -4,7 +4,7 @@ import { getGitService } from "@/lib/git-registry";
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ repo: string; branch: string; path: string[] }> }
-) {
+): Promise<Response> {
   const { repo, branch, path: pathSegments } = await params;
   const repoName = decodeURIComponent(repo);
   const branchName = decodeURIComponent(branch);

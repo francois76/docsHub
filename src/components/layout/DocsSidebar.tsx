@@ -77,7 +77,7 @@ function buildDirectCounts(
 /*  Small comment badge                                            */
 /* ────────────────────────────────────────────────────────────── */
 
-function CommentBadge({ count }: { readonly count: number }) {
+function CommentBadge({ count }: { readonly count: number }): React.JSX.Element | null {
   if (count === 0) return null;
   return (
     <span className="flex items-center gap-0.5 shrink-0 pr-1.5 text-[10px] font-medium text-primary/80">
@@ -113,7 +113,7 @@ interface Props {
 }
 
  
-export function DocsSidebar({ repo, branch }: Props) {
+export function DocsSidebar({ repo, branch }: Props): React.JSX.Element {
   const [tree, setTree] = useState<FileTreeNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [treeError, setTreeError] = useState<{
@@ -136,21 +136,21 @@ export function DocsSidebar({ repo, branch }: Props) {
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(0);
 
-  const handleDragStart = (dragEvent: React.MouseEvent) => {
+  const handleDragStart = (dragEvent: React.MouseEvent): void => {
     isDragging.current = true;
     dragStartX.current = dragEvent.clientX;
     dragStartWidth.current = sidebarWidth;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
-    const onMove = (moveEvent: MouseEvent) => {
+    const onMove = (moveEvent: MouseEvent): void => {
       if (!isDragging.current) return;
       const next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN,
         dragStartWidth.current + moveEvent.clientX - dragStartX.current
       ));
       setSidebarWidth(next);
     };
-    const onUp = () => {
+    const onUp = (): void => {
       isDragging.current = false;
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
@@ -305,7 +305,7 @@ function TreeNode({
   readonly activePath: string | null;
   readonly headingsMap: Map<string, HeadingInfo[]>;
   readonly depth: number;
-}) {
+}): React.JSX.Element {
   const [open, setOpen] = useState(
     () => (activePath ? isAncestorOf(node, activePath) : depth === 0)
   );
@@ -384,7 +384,7 @@ function FileNode({
   readonly activePath: string | null;
   readonly headingsMap: Map<string, HeadingInfo[]>;
   readonly depth: number;
-}) {
+}): React.JSX.Element {
   const router = useRouter();
   const review = useReview();
   const comments = review?.comments ?? [];
@@ -497,7 +497,7 @@ function HeadingSubTree({
   readonly directCounts: Map<string, number>;
   readonly isActiveFile: boolean;
   readonly depth: number;
-}) {
+}): React.JSX.Element {
   const router = useRouter();
   const groups = buildHeadingGroups(headings);
 
@@ -536,7 +536,7 @@ function H2Group({
   readonly isActiveFile: boolean;
   readonly depth: number;
   readonly router: ReturnType<typeof useRouter>;
-}) {
+}): React.JSX.Element {
   const h2 = group.heading;
   const {children} = group;
   const hasChildren = children.length > 0;
@@ -556,7 +556,7 @@ function H2Group({
   // expanded  → direct only (H3 badges show their own counts)
   const count = open && hasChildren ? h2Direct : h2Total;
 
-  function navigateToHeading(slug: string) {
+  function navigateToHeading(slug: string): void {
     if (isActiveFile) {
       document.querySelector(`#${slug}`)?.scrollIntoView({
         behavior: "smooth",
@@ -674,7 +674,7 @@ function deriveActivePath(
 
 function collectMarkdownPaths(nodes: FileTreeNode[]): string[] {
   const paths: string[] = [];
-  function walk(node: FileTreeNode) {
+  function walk(node: FileTreeNode): void {
     if (node.type === "file" && MARKDOWN_FILE_RE.test(node.name)) {
       paths.push(node.path);
     }

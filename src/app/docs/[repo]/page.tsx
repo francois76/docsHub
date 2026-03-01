@@ -5,7 +5,7 @@ interface Props {
   params: Promise<{ repo: string }>;
 }
 
-export default async function RepoIndexPage({ params }: Props) {
+export default async function RepoIndexPage({ params }: Props): Promise<never> {
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
 

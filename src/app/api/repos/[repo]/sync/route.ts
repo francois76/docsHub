@@ -25,7 +25,7 @@ function friendlySyncError(raw: string, hasToken: boolean, repoType: string): st
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ repo: string }> }
-) {
+): Promise<Response> {
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
 

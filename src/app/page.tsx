@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getConfig } from "@/lib/config";
 
-export default async function HomePage() {
+export default async function HomePage(): Promise<React.JSX.Element> {
   const config = await getConfig();
   if (config.repos.length > 0) {
     const first = config.repos[0];

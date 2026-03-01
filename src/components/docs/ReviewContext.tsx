@@ -56,7 +56,7 @@ export interface ReviewContextValue {
 
 const ReviewContext = createContext<ReviewContextValue | null>(null);
 
-export function useReview() {
+export function useReview(): ReviewContextValue | null {
   return useContext(ReviewContext);
 }
 
@@ -80,7 +80,7 @@ export function ReviewProvider({
   authMode,
   defaultBranch,
   children,
-}: ReviewProviderProps) {
+}: ReviewProviderProps): React.JSX.Element {
   const [pr, setPr] = useState<PullRequest | null>(null);
   const [comments, setComments] = useState<ReviewComment[]>([]);
   const [canReview, setCanReview] = useState(false);
