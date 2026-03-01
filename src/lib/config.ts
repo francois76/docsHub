@@ -1,5 +1,5 @@
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import path from "node:path";
 import { parse } from "yaml";
 import type { DocsHubConfig, RepoConfig } from "@/types/config";
 
@@ -18,11 +18,11 @@ export async function getConfig(): Promise<DocsHubConfig> {
     return cachedConfig;
   }
 
-  const raw = fs.readFileSync(configPath, "utf-8");
+  const raw = await fs.promises.readFile(configPath, "utf8");
   const parsed = parse(raw) as Partial<DocsHubConfig>;
 
   cachedConfig = {
-    repos: (parsed.repos ?? []).map(normalizeRepo),
+    repos: (parsed.repos ?? []).map((r) => normalizeRepo(r)),
     cacheDir: parsed.cacheDir ?? DEFAULT_CACHE_DIR,
   };
 
@@ -59,10 +59,10 @@ function normalizeRepo(repo: Partial<RepoConfig>): RepoConfig {
  */
 function resolveToken(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
-  const bracedMatch = raw.match(/^\$\{([^}]+)\}$/);
-  if (bracedMatch) return process.env[bracedMatch[1]] || undefined;
-  const bareMatch = raw.match(/^\$([A-Za-z_][A-Za-z0-9_]*)$/);
-  if (bareMatch) return process.env[bareMatch[1]] || undefined;
+  const bracedMatch = /^\$\{([^}]+)\}$/.exec(raw);
+  if (bracedMatch) return process.env[bracedMatch[1]] ?? undefined;
+  const bareMatch = /^\$([A-Za-z_]\w*)$/.exec(raw);
+  if (bareMatch) return process.env[bareMatch[1]] ?? undefined;
   return raw;
 }
 

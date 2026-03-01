@@ -1,36 +1,38 @@
 "use client";
 
-import { signIn, getProviders } from "next-auth/react";
-import type { ClientSafeProvider } from "next-auth/react";
+import { signIn, getProviders, type ClientSafeProvider } from "next-auth/react";
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Github } from "lucide-react";
+// eslint-disable-next-line sonarjs/deprecation
+import { Github } from "lucide-react"; // Brand icons deprecated in lucide v1 — will be replaced
 
-function SignInContent() {
+interface RepoEntry { name: string; type: string; }
+
+function SignInContent(): React.JSX.Element {
   const searchParams = useSearchParams();
-  const repoParam = searchParams.get("repo");
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const repoParameter = searchParams.get("repo");
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/";
 
   const [providers, setProviders] = useState<Record<string, ClientSafeProvider>>({});
   const [repoType, setRepoType] = useState<string | null>(null);
 
   useEffect(() => {
-    getProviders().then((p) => setProviders(p ?? {}));
+    void getProviders().then((p) => { setProviders(p ?? {}); });
   }, []);
 
   useEffect(() => {
-    if (repoParam) {
-      fetch("/api/repos")
-        .then((r) => r.json())
+    if (repoParameter) {
+      void fetch("/api/repos")
+        .then((r) => r.json() as Promise<{ repos?: RepoEntry[] }>)
         .then((d) => {
-          const repo = (d.repos ?? []).find(
-            (r: { name: string }) => r.name === repoParam
+          const repo = d.repos?.find(
+            (r) => r.name === repoParameter
           );
           if (repo) setRepoType(repo.type);
         });
     }
-  }, [repoParam]);
+  }, [repoParameter]);
 
   /* Filter providers to only show the one matching the repo type */
   const filteredProviders = Object.values(providers).filter((p: ClientSafeProvider) => {
@@ -55,6 +57,7 @@ function SignInContent() {
               variant="outline"
               className="gap-2"
             >
+              {/* eslint-disable-next-line @typescript-eslint/no-deprecated, sonarjs/deprecation */}
               {provider.id === "github" && <Github className="h-4 w-4" />}
               Se connecter avec {provider.name}
             </Button>

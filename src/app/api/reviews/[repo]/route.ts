@@ -4,7 +4,24 @@ import { authOptions } from "@/lib/auth";
 import { getConfig, getRepoConfig } from "@/lib/config";
 import { createReviewProvider } from "@/lib/review";
 
-type ExtendedSession = { accessToken?: string; provider?: string; login?: string };
+interface ExtendedSession { accessToken?: string; provider?: string; login?: string }
+
+interface PostBody {
+  prNumber: number;
+  action: string;
+  comment: string;
+  filePath?: string;
+  line?: number;
+  commitSha?: string;
+  branch?: string;
+  baseBranch?: string;
+  title?: string;
+}
+
+interface DeleteBody {
+  commentId: string | number;
+  commentType?: string;
+}
 
 /** Fields included in every GET response so the client knows the repo context */
 function repoMeta(repoConfig: { type: string; authMode?: string; defaultBranch?: string }) {
@@ -38,9 +55,9 @@ export async function GET(
     const meta = repoMeta(repoConfig);
     const provider = createReviewProvider(
       repoConfig,
-      (session as ExtendedSession)?.accessToken,
-      (session as ExtendedSession)?.provider,
-      (session as ExtendedSession)?.login ?? session?.user?.name ?? undefined
+      (session as ExtendedSession | null)?.accessToken,
+      (session as ExtendedSession | null)?.provider,
+      (session as ExtendedSession | null)?.login ?? session?.user?.name ?? undefined
     );
 
     if (!provider) {
@@ -71,7 +88,7 @@ export async function POST(
 ) {
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
-  const body = await req.json();
+  const body = await req.json() as PostBody;
   const { prNumber, action, comment, filePath, line, commitSha } = body;
 
   try {
@@ -83,9 +100,9 @@ export async function POST(
     const repoConfig = getRepoConfig(repoName, config);
     const provider = createReviewProvider(
       repoConfig,
-      (session as ExtendedSession)?.accessToken,
-      (session as ExtendedSession)?.provider,
-      (session as ExtendedSession)?.login ?? session?.user?.name ?? undefined
+      (session as ExtendedSession | null)?.accessToken,
+      (session as ExtendedSession | null)?.provider,
+      (session as ExtendedSession | null)?.login ?? session?.user?.name ?? undefined
     );
 
     if (!provider) {
@@ -145,7 +162,7 @@ export async function DELETE(
 ) {
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
-  const body = await req.json();
+  const body = await req.json() as DeleteBody;
   const { commentId, commentType } = body;
 
   if (!commentId) {
@@ -161,9 +178,9 @@ export async function DELETE(
     const repoConfig = getRepoConfig(repoName, config);
     const provider = createReviewProvider(
       repoConfig,
-      (session as ExtendedSession)?.accessToken,
-      (session as ExtendedSession)?.provider,
-      (session as ExtendedSession)?.login ?? session?.user?.name ?? undefined
+      (session as ExtendedSession | null)?.accessToken,
+      (session as ExtendedSession | null)?.provider,
+      (session as ExtendedSession | null)?.login ?? session?.user?.name ?? undefined
     );
 
     if (!provider) {
@@ -186,6 +203,6 @@ function extractRepoPath(url: string, _type: string): string {
   // https://github.com/owner/repo.git -> owner/repo
   // git@github.com:owner/repo.git -> owner/repo
   const cleaned = url.replace(/\.git$/, "");
-  const match = cleaned.match(/[/:]([\w-]+\/[\w.-]+)$/);
+  const match = /[/:]([\w-]+\/[\w.-]+)$/.exec(cleaned);
   return match ? match[1] : url;
 }

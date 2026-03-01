@@ -6,8 +6,8 @@ import { ReviewProvider } from "@/components/docs/ReviewContext";
 import { ReviewBar } from "@/components/docs/ReviewBar";
 
 interface Props {
-  params: Promise<{ repo: string; branch: string }>;
-  children: React.ReactNode;
+  readonly params: Promise<{ readonly repo: string; readonly branch: string }>;
+  readonly children: React.ReactNode;
 }
 
 export default async function BranchLayout({ params, children }: Props) {

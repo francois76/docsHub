@@ -30,7 +30,7 @@ if (process.env.GITLAB_CLIENT_ID && process.env.GITLAB_CLIENT_SECRET) {
 export const authOptions: NextAuthOptions = {
   providers,
   callbacks: {
-    async jwt({ token, account, profile }) {
+    jwt({ token, account, profile }) {
       if (account) {
         token.accessToken = account.access_token;
         token.provider = account.provider;
@@ -45,7 +45,7 @@ export const authOptions: NextAuthOptions = {
       }
       return token;
     },
-    async session({ session, token }) {
+    session({ session, token }) {
       (session as unknown as Record<string, unknown>).accessToken = token.accessToken;
       (session as unknown as Record<string, unknown>).provider = token.provider;
       (session as unknown as Record<string, unknown>).login = token.login;

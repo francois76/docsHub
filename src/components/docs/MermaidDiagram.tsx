@@ -5,8 +5,8 @@ import { createPortal } from "react-dom";
 import { Maximize2, X } from "lucide-react";
 
 interface Props {
-  diagram: string;
-  id: string;
+  readonly diagram: string;
+  readonly id: string;
 }
 
 function useMermaidRender(diagram: string, id: string, containerId: string) {
@@ -18,7 +18,8 @@ function useMermaidRender(diagram: string, id: string, containerId: string) {
     async function render() {
       if (!ref.current) return;
       try {
-        const mermaid = (await import("mermaid")).default;
+        const mermaidModule = await import("mermaid");
+        const mermaid = mermaidModule.default;
         mermaid.initialize({
           startOnLoad: false,
           theme: "default",
@@ -26,17 +27,19 @@ function useMermaidRender(diagram: string, id: string, containerId: string) {
         });
 
         const { svg } = await mermaid.render(containerId, diagram);
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (!cancelled && ref.current) {
           ref.current.innerHTML = svg;
         }
-      } catch (err) {
+      } catch (error) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (!cancelled && ref.current) {
-          ref.current.innerHTML = `<pre class="text-xs text-destructive p-2">${String(err)}</pre>`;
+          ref.current.innerHTML = `<pre class="text-xs text-destructive p-2">${String(error)}</pre>`;
         }
       }
     }
 
-    render();
+    void render();
     return () => {
       cancelled = true;
     };
@@ -57,11 +60,11 @@ function FullscreenModal({
   const ref = useMermaidRender(diagram, id, `mermaid-fs-${id}`);
 
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    const handleKey = (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key === "Escape") onClose();
     };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+    globalThis.addEventListener("keydown", handleKey);
+    return () => { globalThis.removeEventListener("keydown", handleKey); };
   }, [onClose]);
 
   return createPortal(
@@ -71,7 +74,7 @@ function FullscreenModal({
     >
       <div
         className="relative max-h-[90vh] max-w-[90vw] w-full overflow-auto rounded-xl bg-white p-6 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(clickEvent) => { clickEvent.stopPropagation(); }}
       >
         <button
           onClick={onClose}
@@ -94,8 +97,8 @@ function FullscreenModal({
 export function MermaidDiagram({ diagram, id }: Props) {
   const ref = useMermaidRender(diagram, id, `mermaid-${id}`);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const openFullscreen = useCallback(() => setIsFullscreen(true), []);
-  const closeFullscreen = useCallback(() => setIsFullscreen(false), []);
+  const openFullscreen = useCallback(() => { setIsFullscreen(true); }, []);
+  const closeFullscreen = useCallback(() => { setIsFullscreen(false); }, []);
 
   return (
     <div className="group relative">

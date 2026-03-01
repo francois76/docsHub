@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/restrict-template-expressions, @typescript-eslint/no-misused-spread, sonarjs/no-nested-template-literals, no-nested-ternary, sonarjs/no-nested-conditional */
 import type {
   ReviewProvider,
   ReviewComment,
@@ -55,7 +55,7 @@ export class GitHubReviewProvider implements ReviewProvider {
     const prs = await this.request<any[]>(
       `/repos/${repo}/pulls?state=open&head=${encodeURIComponent(`${owner}:${headBranch}`)}&per_page=5`
     );
-    if (!prs.length) return null;
+    if (prs.length === 0) return null;
     const pr = prs[0];
     return {
       id: pr.id,
@@ -77,9 +77,9 @@ export class GitHubReviewProvider implements ReviewProvider {
     const toComment = (c: any, inline = false): ReviewComment => {
       const rawBody: string = c.body ?? "";
       // Parse hidden markers embedded in fallback issue comments.
-      const lineMatch = rawBody.match(/\n?<!-- docshub:line=(\d+) -->/);
-      const pathMatch = rawBody.match(/\n?<!-- docshub:path=([^\s>]+) -->/);
-      const docshubLine = lineMatch ? parseInt(lineMatch[1]) : undefined;
+      const lineMatch = /\n?<!-- docshub:line=(\d+) -->/.exec(rawBody);
+      const pathMatch = /\n?<!-- docshub:path=([^\s>]+) -->/.exec(rawBody);
+      const docshubLine = lineMatch ? Number.parseInt(lineMatch[1]) : undefined;
       const docshubPath = pathMatch ? pathMatch[1] : undefined;
       // Strip markers so they never appear as visible text in docsHub.
       const body = rawBody
@@ -87,7 +87,7 @@ export class GitHubReviewProvider implements ReviewProvider {
         .replace(/\n?<!-- docshub:path=[^\s>]+ -->/, "")
         .trimEnd();
       // Issue comment with embedded markers acts as an inline comment.
-      const isEmbedded = !inline && !!docshubLine && !!docshubPath;
+      const isEmbedded = !inline && Boolean(docshubLine) && Boolean(docshubPath);
       return {
         id: c.id,
         author: c.user?.login ?? "unknown",

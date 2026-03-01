@@ -29,11 +29,11 @@ export type ReviewAction = "approve" | "request_changes" | "comment";
 export interface SubmitReviewPayload {
   action: ReviewAction;
   body?: string;
-  comments?: Array<{
+  comments?: {
     path: string;
     line: number;
     body: string;
-  }>;
+  }[];
 }
 
 /** Unified interface for PR review operations across platforms */

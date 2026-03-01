@@ -1,7 +1,7 @@
-import * as fs from "fs";
-import * as path from "path";
-import { execFile } from "child_process";
-import simpleGit, { SimpleGit } from "simple-git";
+import * as fs from "node:fs";
+import path from "node:path";
+import { execFile } from "node:child_process";
+import simpleGit, { type SimpleGit } from "simple-git";
 import type { RepoConfig } from "@/types/config";
 import type { BranchInfo, FileTreeNode } from "@/types/git";
 
@@ -17,10 +17,8 @@ export class GitService {
 
   /** Lazy simpleGit instance — only created once the directory is known to exist. */
   private get git(): SimpleGit {
-    if (!this._git) {
-      this._git = simpleGit(this.repoPath);
-    }
-    return this._git;
+      this._git ??= simpleGit(this.repoPath);
+      return this._git;
   }
 
   /** Clone or pull the repo to keep it in sync */
@@ -67,7 +65,7 @@ export class GitService {
         : name;
 
       // Deduplicate
-      if (!branches.find((b) => b.name === cleanName)) {
+      if (!branches.some((b) => b.name === cleanName)) {
         branches.push({
           name: cleanName,
           isRemote,
@@ -131,9 +129,9 @@ export class GitService {
       const ref = await this.resolveRef(branch);
       const content = await this.git.show([`${ref}:${filePath}`]);
       return content;
-    } catch (err) {
+    } catch (error) {
       throw new Error(
-        `File "${filePath}" not found on branch "${branch}": ${err}`
+        `File "${filePath}" not found on branch "${branch}": ${String(error)}`
       );
     }
   }
@@ -142,15 +140,17 @@ export class GitService {
   async readFileBuffer(branch: string, filePath: string): Promise<Buffer> {
     const ref = await this.resolveRef(branch);
     return new Promise((resolve, reject) => {
+      /* eslint-disable sonarjs/no-os-command-from-path */
       execFile(
         "git",
         ["-C", this.repoPath, "show", `${ref}:${filePath}`],
         { encoding: "buffer", maxBuffer: 50 * 1024 * 1024 },
         (err: Error | null, stdout: Buffer) => {
-          if (err) return reject(err);
+          if (err) { reject(err); return; }
           resolve(stdout);
         }
       );
+      /* eslint-enable sonarjs/no-os-command-from-path */
     });
   }
 
@@ -174,12 +174,13 @@ export class GitService {
 }
 
 /** Build a hierarchical tree from a flat list of file paths */
+// eslint-disable-next-line sonarjs/cognitive-complexity
 function buildTree(files: string[], basePath: string): FileTreeNode[] {
   const root: FileTreeNode[] = [];
   const map = new Map<string, FileTreeNode>();
 
   for (const filePath of files) {
-    const relativePath = filePath.startsWith(basePath + "/")
+    const relativePath = filePath.startsWith(`${basePath  }/`)
       ? filePath.slice(basePath.length + 1)
       : filePath;
 
@@ -187,17 +188,17 @@ function buildTree(files: string[], basePath: string): FileTreeNode[] {
     let currentLevel = root;
     let currentPath = basePath;
 
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      currentPath = currentPath + "/" + part;
-      const isLast = i === parts.length - 1;
+    for (let index = 0; index < parts.length; index++) {
+      const part = parts[index];
+      currentPath = `${currentPath  }/${  part}`;
+      const isLast = index === parts.length - 1;
 
       if (!map.has(currentPath)) {
         const node: FileTreeNode = {
           name: part,
-          path: filePath.startsWith(basePath + "/")
-            ? basePath + "/" + parts.slice(0, i + 1).join("/")
-            : parts.slice(0, i + 1).join("/"),
+          path: filePath.startsWith(`${basePath  }/`)
+            ? `${basePath  }/${  parts.slice(0, index + 1).join("/")}`
+            : parts.slice(0, index + 1).join("/"),
           type: isLast ? "file" : "directory",
           children: isLast ? undefined : [],
         };
@@ -209,9 +210,8 @@ function buildTree(files: string[], basePath: string): FileTreeNode[] {
         currentLevel.push(node);
       }
 
-      if (!isLast) {
-        currentLevel = map.get(currentPath)!.children!;
-      }
+        const childLevel = map.get(currentPath)?.children;
+      if (childLevel) currentLevel = childLevel;
     }
   }
 

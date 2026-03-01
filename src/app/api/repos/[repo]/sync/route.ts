@@ -47,7 +47,7 @@ export async function POST(
       const config = await configPromise; // reuse the promise started above — no extra fetch
       const repoConfig = getRepoConfig(repoName, config);
       repoType = repoConfig.type;
-      hasToken = !!repoConfig.token;
+      hasToken = Boolean(repoConfig.token);
     } catch { /* ignore */ }
     const friendly = friendlySyncError(rawMessage, hasToken, repoType);
     return NextResponse.json(

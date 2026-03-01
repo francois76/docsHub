@@ -17,7 +17,7 @@ export async function GET(
     if (!available) {
       const config = await getConfig();
       const repoConfig = getRepoConfig(repoName, config);
-      const hasToken = !!repoConfig.token;
+      const hasToken = Boolean(repoConfig.token);
       const isLocal = repoConfig.type === "local";
 
       let hint: string;
@@ -25,13 +25,13 @@ export async function GET(
 
       if (isLocal) {
         errorCode = "local_path_missing";
-        hint = `Le chemin local "${repoConfig.path}" est introuvable ou n'est pas un dépôt Git.`;
-      } else if (!hasToken) {
-        errorCode = "no_token";
-        hint = `Aucun token configuré pour ce dépôt ${repoConfig.type.toUpperCase()}. Ajoutez un champ \`token\` dans .docshub.yml puis cliquez sur Sync.`;
-      } else {
+        hint = `Le chemin local "${repoConfig.path ?? "?"}" est introuvable ou n'est pas un dépôt Git.`;
+      } else if (hasToken) {
         errorCode = "not_synced";
         hint = `Le dépôt n'a pas encore été cloné. Cliquez sur Sync pour le cloner.`;
+      } else {
+        errorCode = "no_token";
+        hint = `Aucun token configuré pour ce dépôt ${repoConfig.type.toUpperCase()}. Ajoutez un champ \`token\` dans .docshub.yml puis cliquez sur Sync.`;
       }
 
       return NextResponse.json({ branches: [], error: errorCode, hint });

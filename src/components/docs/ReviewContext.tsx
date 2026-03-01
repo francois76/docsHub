@@ -12,6 +12,17 @@ import { toast } from "sonner";
 import type { PullRequest, ReviewComment } from "@/lib/review/types";
 
 /* ────────────────────────────────────────────────────────────── */
+/*  Typed API response                                            */
+/* ────────────────────────────────────────────────────────────── */
+
+interface ReviewApiResponse {
+  pr?: PullRequest;
+  comments?: ReviewComment[];
+  canReview?: boolean;
+  error?: string;
+}
+
+/* ────────────────────────────────────────────────────────────── */
 /*  Context value                                                 */
 /* ────────────────────────────────────────────────────────────── */
 
@@ -54,12 +65,12 @@ export function useReview() {
 /* ────────────────────────────────────────────────────────────── */
 
 interface ReviewProviderProps {
-  repo: string;
-  branch: string;
-  repoType: string;
-  authMode: string;
-  defaultBranch: string;
-  children: React.ReactNode;
+  readonly repo: string;
+  readonly branch: string;
+  readonly repoType: string;
+  readonly authMode: string;
+  readonly defaultBranch: string;
+  readonly children: React.ReactNode;
 }
 
 export function ReviewProvider({
@@ -88,7 +99,7 @@ export function ReviewProvider({
       const res = await fetch(
         `/api/reviews/${encodeURIComponent(repo)}?branch=${encodeURIComponent(branch)}`
       );
-      const data = await res.json();
+      const data = await res.json() as ReviewApiResponse;
       setPr(data.pr ?? null);
       setComments(data.comments ?? []);
       setCanReview(data.canReview ?? false);
@@ -100,7 +111,7 @@ export function ReviewProvider({
   }, [repo, branch, isDefaultBranch]);
 
   useEffect(() => {
-    fetchReview();
+    void fetchReview();
   }, [fetchReview]);
 
   /* ── create PR ─────────────────────────────────────────────── */
@@ -120,13 +131,13 @@ export function ReviewProvider({
             }),
           }
         );
-        const data = await res.json();
+        const data = await res.json() as ReviewApiResponse;
         if (data.error) throw new Error(data.error);
         setPr(data.pr);
         setCanReview(true);
         toast.success("Pull request créée !");
-      } catch (err) {
-        toast.error(`Erreur lors de la création de la PR : ${err}`);
+      } catch (error) {
+        toast.error(`Erreur lors de la création de la PR : ${String(error)}`);
       }
     },
     [repo, branch, defaultBranch]
@@ -149,12 +160,12 @@ export function ReviewProvider({
             }),
           }
         );
-        const data = await res.json();
+        const data = await res.json() as ReviewApiResponse;
         if (data.error) throw new Error(data.error);
-        setComments((prev) => [...prev, data as ReviewComment]);
+        setComments((previous) => [...previous, data as ReviewComment]);
         toast.success("Commentaire ajouté");
-      } catch (err) {
-        toast.error(`Erreur : ${err}`);
+      } catch (error) {
+        toast.error(`Erreur : ${String(error)}`);
       }
     },
     [repo, pr]
@@ -179,12 +190,12 @@ export function ReviewProvider({
             }),
           }
         );
-        const data = await res.json();
+        const data = await res.json() as ReviewApiResponse;
         if (data.error) throw new Error(data.error);
-        setComments((prev) => [...prev, data as ReviewComment]);
+        setComments((previous) => [...previous, data as ReviewComment]);
         toast.success("Commentaire ajouté");
-      } catch (err) {
-        toast.error(`Erreur : ${err}`);
+      } catch (error) {
+        toast.error(`Erreur : ${String(error)}`);
       }
     },
     [repo, pr]
@@ -202,12 +213,12 @@ export function ReviewProvider({
             body: JSON.stringify({ commentId, commentType }),
           }
         );
-        const data = await res.json();
+        const data = await res.json() as ReviewApiResponse;
         if (data.error) throw new Error(data.error);
-        setComments((prev) => prev.filter((c) => c.id !== commentId));
+        setComments((previous) => previous.filter((c) => c.id !== commentId));
         toast.success("Commentaire supprimé");
-      } catch (err) {
-        toast.error(`Erreur lors de la suppression : ${err}`);
+      } catch (error) {
+        toast.error(`Erreur lors de la suppression : ${String(error)}`);
       }
     },
     [repo]
@@ -230,13 +241,13 @@ export function ReviewProvider({
             }),
           }
         );
-        const data = await res.json();
+        const data = await res.json() as ReviewApiResponse;
         if (data.error) throw new Error(data.error);
         toast.success(
           action === "approve" ? "PR approuvée !" : "Modifications demandées"
         );
-      } catch (err) {
-        toast.error(`Erreur : ${err}`);
+      } catch (error) {
+        toast.error(`Erreur : ${String(error)}`);
       }
     },
     [repo, pr]
@@ -244,14 +255,11 @@ export function ReviewProvider({
 
   /* ── sign in (only relevant for OAuth mode) ────────────────── */
   const signInForReview = useCallback(() => {
-    const provider =
-      repoType === "github"
-        ? "github"
-        : repoType === "gitlab"
-          ? "gitlab"
-          : null;
+    let provider: string | null = null;
+    if (repoType === "github") provider = "github";
+    else if (repoType === "gitlab") provider = "gitlab";
     if (provider) {
-      signIn(provider, { callbackUrl: window.location.href });
+      void signIn(provider, { callbackUrl: globalThis.location.href });
     }
   }, [repoType]);
 

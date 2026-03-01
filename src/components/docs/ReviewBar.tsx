@@ -40,12 +40,9 @@ export function ReviewBar() {
 
   /* ── OAuth mode without valid session ───────────────────────── */
   if (review.authMode === "oauth" && !review.canReview) {
-    const providerLabel =
-      review.repoType === "github"
-        ? "GitHub"
-        : review.repoType === "gitlab"
-          ? "GitLab"
-          : review.repoType;
+    let providerLabel: string = review.repoType;
+    if (review.repoType === "github") providerLabel = "GitHub";
+    else if (review.repoType === "gitlab") providerLabel = "GitLab";
     return (
       <div className="border-t bg-muted/30 px-4 py-3 flex items-center gap-3 shrink-0">
         <MessageSquare className="h-4 w-4 text-muted-foreground" />
@@ -100,7 +97,7 @@ export function ReviewBar() {
 
   /* ── PR exists ─────────────────────────────────────────────── */
   const globalComments = review.comments.filter((c) => !c.path);
-  const inlineCount = review.comments.filter((c) => !!c.path).length;
+  const inlineCount = review.comments.filter((c) => Boolean(c.path)).length;
 
   const handleSubmitComment = async () => {
     if (!comment.trim()) return;
@@ -140,13 +137,13 @@ export function ReviewBar() {
           )}
           <Badge variant="secondary" className="text-[10px]">
             {review.comments.length} commentaire
-            {review.comments.length !== 1 ? "s" : ""}
+            {review.comments.length === 1 ? "" : "s"}
           </Badge>
           <Button
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={() => setExpanded((e) => !e)}
+            onClick={() => { setExpanded((previous) => !previous); }}
           >
             {expanded ? (
               <ChevronDown className="h-4 w-4" />
@@ -179,7 +176,7 @@ export function ReviewBar() {
             <Textarea
               placeholder="Commentaire global (optionnel)…"
               value={comment}
-              onChange={(e) => setComment(e.target.value)}
+              onChange={(changeEvent) => { setComment(changeEvent.target.value); }}
               rows={2}
               className="text-sm resize-none"
             />
@@ -222,7 +219,7 @@ export function ReviewBar() {
   );
 }
 
-function GlobalCommentCard({ comment }: { comment: ReviewComment }) {
+function GlobalCommentCard({ comment }: { readonly comment: ReviewComment }) {
   return (
     <div
       className={cn(

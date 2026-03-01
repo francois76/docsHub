@@ -1,11 +1,12 @@
-import * as path from "path";
+import path from "node:path";
 import { GitService } from "./git-service";
 import { getConfig, getRepoConfig } from "./config";
 
 const instances = new Map<string, GitService>();
 
 export async function getGitService(repoName: string): Promise<GitService> {
-  if (instances.has(repoName)) return instances.get(repoName)!;
+  const existing = instances.get(repoName);
+  if (existing) { return existing; }
 
   const config = await getConfig();
   const repoConfig = getRepoConfig(repoName, config);

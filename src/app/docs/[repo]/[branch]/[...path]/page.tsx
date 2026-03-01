@@ -8,12 +8,12 @@ import { FileText } from "lucide-react";
 const MARKDOWN_FILE_RE = /\.(md|mdx|markdown)$/i;
 
 interface Props {
-  params: Promise<{ repo: string; branch: string; path: string[] }>;
+  readonly params: Promise<{ readonly repo: string; readonly branch: string; readonly path: string[] }>;
 }
 
 export async function generateMetadata({ params }: Props) {
   const { path } = await params;
-  const fileName = decodeURIComponent(path[path.length - 1] ?? "");
+  const fileName = decodeURIComponent(path.at(-1) ?? "");
   return { title: `${fileName} — docsHub` };
 }
 
@@ -21,8 +21,8 @@ export default async function DocFilePage({ params }: Props) {
   const { repo, branch, path: pathSegments } = await params;
   const repoName = decodeURIComponent(repo);
   const branchName = decodeURIComponent(branch);
-  const filePath = pathSegments.map(decodeURIComponent).join("/");
-  const fileName = pathSegments[pathSegments.length - 1] ?? "";
+  const filePath = pathSegments.map((s) => decodeURIComponent(s)).join("/");
+  const fileName = pathSegments.at(-1) ?? "";
 
   let content: string;
   try {

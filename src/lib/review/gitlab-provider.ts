@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/restrict-template-expressions, @typescript-eslint/no-misused-spread, @typescript-eslint/no-unnecessary-condition, @typescript-eslint/require-await */
 import type {
   ReviewProvider,
   ReviewComment,
@@ -47,7 +47,7 @@ export class GitLabReviewProvider implements ReviewProvider {
     const mrs = await this.request<any[]>(
       `/projects/${this.encodeRepo(repo)}/merge_requests?state=opened&source_branch=${headBranch}&per_page=5`
     );
-    if (!mrs.length) return null;
+    if (mrs.length === 0) return null;
     const mr = mrs[0];
     return {
       id: mr.id,

@@ -3,7 +3,7 @@ import { getConfig, getRepoConfig } from "@/lib/config";
 import { BookOpen } from "lucide-react";
 
 interface Props {
-  params: Promise<{ repo: string; branch: string }>;
+  readonly params: Promise<{ readonly repo: string; readonly branch: string }>;
 }
 
 export default async function BranchIndexPage({ params }: Props) {

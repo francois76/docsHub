@@ -13,6 +13,7 @@ export function resetMarkdownInstance() {
   highlighterReady = false;
 }
 
+ 
 async function getMarkdown(_repoName: string, _branch: string): Promise<MarkdownIt> {
   if (markdownInstance && highlighterReady) return markdownInstance;
 
@@ -82,12 +83,12 @@ async function getMarkdown(_repoName: string, _branch: string): Promise<Markdown
   instance.core.ruler.push("heading_ids", (state) => {
     const slugCount = new Map<string, number>();
 
-    for (let i = 0; i < state.tokens.length; i++) {
-      const token = state.tokens[i];
+    for (let index = 0; index < state.tokens.length; index++) {
+      const token = state.tokens[index];
       if (token.type !== "heading_open") continue;
 
-      const inlineToken = state.tokens[i + 1];
-      if (!inlineToken || inlineToken.type !== "inline") continue;
+      const inlineToken = state.tokens[index + 1] as Token | undefined;
+      if (inlineToken?.type !== "inline") continue;
 
       // Collect plain text from inline children (text + code_inline)
       const plainText = (inlineToken.children ?? [])
@@ -97,41 +98,40 @@ async function getMarkdown(_repoName: string, _branch: string): Promise<Markdown
 
       const slug = slugifyHeading(plainText);
       const count = slugCount.get(slug) ?? 0;
-      const finalSlug = count === 0 ? slug : `${slug}-${count}`;
+      const finalSlug = count === 0 ? slug : `${slug}-${String(count)}`;
       slugCount.set(slug, count + 1);
 
       token.attrSet("id", finalSlug);
     }
-  });
-
-  // ── Plugin: annotate block-level opening tags with source line info ──
-  // This enables the client-side review overlay to map rendered blocks back to
-  // source line ranges, so inline comments can be placed at the right location.
-  instance.core.ruler.push("source_lines", (state) => {
+   
+  }, "source_lines", (
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    state: any
+  ) => {
+    /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/restrict-plus-operands */
     for (const token of state.tokens) {
-      if (token.map) {
-        // nesting === 1 → opening tag  (p, h1, ul, ol, blockquote, table…)
+      if (token.map && // nesting === 1 → opening tag  (p, h1, ul, ol, blockquote, table…)
         // nesting === 0 → self-closing  (hr, code_block)
-        if (token.nesting >= 0) {
+        token.nesting >= 0) {
           token.attrSet(
             "data-source-line-start",
             String(token.map[0] + 1)
           ); // 1-based
           token.attrSet("data-source-line-end", String(token.map[1]));
         }
-      }
     }
+    /* eslint-enable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/restrict-plus-operands */
   });
 
   // ── Wrap fence output with source-line div ──
   // Fence tokens use a custom renderer, so the core ruler attributes don't end
   // up in the output (the fence rule builds its own HTML). We wrap the result.
-  const originalFence = instance.renderer.rules.fence!;
-  instance.renderer.rules.fence = (tokens, idx, options, env, self) => {
-    const token = tokens[idx];
-    const html = originalFence(tokens, idx, options, env, self);
+  const originalFence = instance.renderer.rules.fence ?? ((t: Token[], index: number, o: MarkdownIt["options"], _error: unknown, s: Renderer) => s.renderToken(t, index, o));
+  instance.renderer.rules.fence = (tokens, index, options, env, self) => {
+    const token = tokens[index];
+    const html = originalFence(tokens, index, options, env, self);
     if (token.map) {
-      return `<div data-source-line-start="${token.map[0] + 1}" data-source-line-end="${token.map[1]}">${html}</div>\n`;
+      return `<div data-source-line-start="${String(token.map[0] + 1)}" data-source-line-end="${String(token.map[1])}">${html}</div>\n`;
     }
     return html;
   };
@@ -140,30 +140,31 @@ async function getMarkdown(_repoName: string, _branch: string): Promise<Markdown
   // The source_lines plugin adds data-source-line-* to the <table> token, but
   // prepending a <button> inside <table> is invalid HTML (browsers eject it).
   // We move those attrs onto a wrapper <div> instead, just like fences above.
-  instance.renderer.rules.table_open = (tokens, idx, _options, _env, self) => {
-    const token = tokens[idx];
+  instance.renderer.rules.table_open = (tokens, index, _options, _env, self) => {
+    const token = tokens[index];
     const lineStart = token.attrGet("data-source-line-start");
     const lineEnd = token.attrGet("data-source-line-end");
     // Remove source-line attrs from <table>.
     token.attrs = (token.attrs ?? []).filter(
       ([k]) => k !== "data-source-line-start" && k !== "data-source-line-end"
     );
-    const wrapAttrs = lineStart
-      ? ` data-source-line-start="${lineStart}" data-source-line-end="${lineEnd}"`
+    const wrapAttributes = lineStart
+      ? ` data-source-line-start="${lineStart}" data-source-line-end="${lineEnd ?? ""}"`
       : "";
-    return `<div class="table-wrapper"${wrapAttrs}>\n<table${self.renderAttrs(token)}>\n`;
+    return `<div class="table-wrapper"${wrapAttributes}>\n<table${self.renderAttrs(token)}>\n`;
   };
   instance.renderer.rules.table_close = () => `</table>\n</div>\n`;
 
   // Override image rendering to use the assets API
   const defaultImageRenderer = instance.renderer.rules.image;
-  instance.renderer.rules.image = (tokens: Token[], idx: number, options: MarkdownIt["options"], env: unknown, self: Renderer) => {
-    const token = tokens[idx];
-    const srcIndex = token.attrIndex("src");
-    if (srcIndex >= 0 && token.attrs) {
-      const src = token.attrs[srcIndex][1];
+  // eslint-disable-next-line sonarjs/cognitive-complexity
+  instance.renderer.rules.image = (tokens: Token[], index: number, options: MarkdownIt["options"], env: unknown, self: Renderer) => {
+    const token = tokens[index];
+    const sourceIndex = token.attrIndex("src");
+    if (sourceIndex >= 0 && token.attrs) {
+      const source = token.attrs[sourceIndex][1];
       // Rewrite relative paths to assets API
-      if (!src.startsWith("http://") && !src.startsWith("https://") && !src.startsWith("/")) {
+      if (!source.startsWith("http://") && !source.startsWith("https://") && !source.startsWith("/")) {
         const { repoName, branch, filePath } = env as {
           repoName: string;
           branch: string;
@@ -172,14 +173,14 @@ async function getMarkdown(_repoName: string, _branch: string): Promise<Markdown
         if (repoName && branch) {
           // Resolve relative to the current file's directory
           const fileDir = filePath ? filePath.split("/").slice(0, -1).join("/") : "";
-          const resolvedPath = fileDir ? `${fileDir}/${src}` : src;
-          token.attrs[srcIndex][1] = `/api/repos/${encodeURIComponent(repoName)}/${encodeURIComponent(branch)}/assets/${resolvedPath}`;
+          const resolvedPath = fileDir ? `${fileDir}/${source}` : source;
+          token.attrs[sourceIndex][1] = `/api/repos/${encodeURIComponent(repoName)}/${encodeURIComponent(branch)}/assets/${resolvedPath}`;
         }
       }
     }
     return defaultImageRenderer
-      ? defaultImageRenderer(tokens, idx, options, env as Record<string, unknown>, self)
-      : self.renderToken(tokens, idx, options);
+      ? defaultImageRenderer(tokens, index, options, env as Record<string, unknown>, self)
+      : self.renderToken(tokens, index, options);
   };
 
   markdownInstance = instance;
@@ -213,9 +214,9 @@ export async function renderMarkdown(
 export function slugifyHeading(text: string): string {
   return text
     .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
+    .replaceAll(/[^\w\s-]/g, "")
     .trim()
-    .replace(/\s+/g, "-");
+    .replaceAll(/\s+/g, "-");
 }
 
 /**
@@ -227,27 +228,29 @@ export function extractHeadings(markdown: string): HeadingInfo[] {
   const result: HeadingInfo[] = [];
   const slugCount = new Map<string, number>();
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  for (const [index, line] of lines.entries()) {
+    // eslint-disable-next-line sonarjs/slow-regex
     const match = /^(#{1,3})\s+(.+)$/.exec(line);
     if (!match) continue;
 
     const level = match[1].length;
     // Strip inline markdown (bold, italic, code, links) from heading text
+    /* eslint-disable sonarjs/slow-regex */
     const raw = match[2]
-      .replace(/`[^`]*`/g, (m) => m.slice(1, -1))
-      .replace(/\*{1,2}([^*]+)\*{1,2}/g, "$1")
-      .replace(/_{1,2}([^_]+)_{1,2}/g, "$1")
-      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replaceAll(/`[^`]*`/g, (m) => m.slice(1, -1))
+      .replaceAll(/\*{1,2}([^*]+)\*{1,2}/g, "$1")
+      .replaceAll(/_{1,2}([^_]+)_{1,2}/g, "$1")
+      .replaceAll(/\[([^\]]+)\]\([^)]*\)/g, "$1")
       .trim();
+    /* eslint-enable sonarjs/slow-regex */
 
     let slug = slugifyHeading(raw);
     // Deduplicate slugs the same way GitHub does (append -1, -2, …)
     const count = slugCount.get(slug) ?? 0;
-    slug = count === 0 ? slug : `${slug}-${count}`;
+    slug = count === 0 ? slug : `${slug}-${String(count)}`;
     slugCount.set(slug, count + 1);
 
-    result.push({ level, text: raw, slug, line: i + 1 });
+    result.push({ level, text: raw, slug, line: index + 1 });
   }
 
   return result;

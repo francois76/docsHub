@@ -49,23 +49,24 @@ function buildDirectCounts(
   const direct = new Map<string, number>();
   let fileDirect = 0;
   const fileComments = comments.filter(
-    (c) => c.path === filePath && c.line != null
+    (c): c is ReviewComment & { line: number } =>
+      c.path === filePath && c.line !== undefined
   );
 
   for (const comment of fileComments) {
-    const line = comment.line!;
+    const { line } = comment;
     // Find the last heading (H2 or H3) whose line is ≤ comment line
     let innermost: HeadingInfo | null = null;
-    for (let i = subHeadings.length - 1; i >= 0; i--) {
-      if (subHeadings[i].line <= line) {
-        innermost = subHeadings[i];
+    for (let index = subHeadings.length - 1; index >= 0; index--) {
+      if (subHeadings[index].line <= line) {
+        innermost = subHeadings[index];
         break;
       }
     }
-    if (!innermost) {
-      fileDirect++;
-    } else {
+    if (innermost) {
       direct.set(innermost.slug, (direct.get(innermost.slug) ?? 0) + 1);
+    } else {
+      fileDirect++;
     }
   }
 
@@ -76,7 +77,7 @@ function buildDirectCounts(
 /*  Small comment badge                                            */
 /* ────────────────────────────────────────────────────────────── */
 
-function CommentBadge({ count }: { count: number }) {
+function CommentBadge({ count }: { readonly count: number }) {
   if (count === 0) return null;
   return (
     <span className="flex items-center gap-0.5 shrink-0 pr-1.5 text-[10px] font-medium text-primary/80">
@@ -84,6 +85,18 @@ function CommentBadge({ count }: { count: number }) {
       {count}
     </span>
   );
+}
+
+const TREE_ERROR_LABELS: Record<string, string> = {
+  no_token: "Token manquant",
+  not_synced: "Dépôt non synchronisé",
+  local_path_missing: "Chemin introuvable",
+};
+
+interface TreeFetchResponse {
+  tree?: FileTreeNode[];
+  error?: string;
+  hint?: string;
 }
 
 const SIDEBAR_MIN = 200;
@@ -95,10 +108,11 @@ const SIDEBAR_DEFAULT = 420;
 /* ────────────────────────────────────────────────────────────── */
 
 interface Props {
-  repo: string;
-  branch: string;
+  readonly repo: string;
+  readonly branch: string;
 }
 
+ 
 export function DocsSidebar({ repo, branch }: Props) {
   const [tree, setTree] = useState<FileTreeNode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,7 +128,7 @@ export function DocsSidebar({ repo, branch }: Props) {
   // from localStorage after hydration via useEffect.
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   useEffect(() => {
-    const stored = parseInt(localStorage.getItem("sidebar-width") ?? "", 10);
+    const stored = Number.parseInt(localStorage.getItem("sidebar-width") ?? "", 10);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (stored >= SIDEBAR_MIN && stored <= SIDEBAR_MAX) setSidebarWidth(stored);
   }, []);
@@ -122,17 +136,17 @@ export function DocsSidebar({ repo, branch }: Props) {
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(0);
 
-  const handleDragStart = (e: React.MouseEvent) => {
+  const handleDragStart = (dragEvent: React.MouseEvent) => {
     isDragging.current = true;
-    dragStartX.current = e.clientX;
+    dragStartX.current = dragEvent.clientX;
     dragStartWidth.current = sidebarWidth;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
-    const onMove = (ev: MouseEvent) => {
+    const onMove = (moveEvent: MouseEvent) => {
       if (!isDragging.current) return;
       const next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN,
-        dragStartWidth.current + ev.clientX - dragStartX.current
+        dragStartWidth.current + moveEvent.clientX - dragStartX.current
       ));
       setSidebarWidth(next);
     };
@@ -144,11 +158,11 @@ export function DocsSidebar({ repo, branch }: Props) {
         localStorage.setItem("sidebar-width", String(w));
         return w;
       });
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      globalThis.removeEventListener("mousemove", onMove);
+      globalThis.removeEventListener("mouseup", onUp);
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    globalThis.addEventListener("mousemove", onMove);
+    globalThis.addEventListener("mouseup", onUp);
   };
 
   const pathname = usePathname();
@@ -160,10 +174,10 @@ export function DocsSidebar({ repo, branch }: Props) {
     setLoading(true);
      
     setTreeError(null);
-    fetch(
+    void fetch(
       `/api/repos/${encodeURIComponent(repo)}/tree?branch=${encodeURIComponent(branch)}`
     )
-      .then((r) => r.json())
+      .then((r) => r.json() as Promise<TreeFetchResponse>)
       .then((d) => {
         const treeData: FileTreeNode[] = d.tree ?? [];
         setTree(treeData);
@@ -189,7 +203,7 @@ export function DocsSidebar({ repo, branch }: Props) {
                 `/api/repos/${encodeURIComponent(repo)}/headings?branch=${encodeURIComponent(branch)}&paths=${encodeURIComponent(uncachedPaths.join(","))}`
               )
                 .then((r) => r.json())
-                .then((data: { headings: Record<string, HeadingInfo[]> }) => {
+                .then((data: { headings?: Record<string, HeadingInfo[]> }) => {
                   for (const [p, hs] of Object.entries(data.headings ?? {})) {
                     headingsCache.set(`${repo}@@${branch}@@${p}`, hs);
                   }
@@ -197,7 +211,7 @@ export function DocsSidebar({ repo, branch }: Props) {
                 .catch(() => {/* silently skip */})
             : Promise.resolve();
 
-        fetchPromise.then(() => {
+        void fetchPromise.then(() => {
           const map = new Map<string, HeadingInfo[]>();
           for (const p of allPaths) {
             const cached = headingsCache.get(`${repo}@@${branch}@@${p}`);
@@ -206,8 +220,49 @@ export function DocsSidebar({ repo, branch }: Props) {
           setHeadingsMap(map);
         });
       })
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); });
   }, [repo, branch]);
+
+  let sidebarContent;
+  if (loading) {
+    sidebarContent = <div className="p-4 text-sm text-muted-foreground">Chargement…</div>;
+  } else if (treeError) {
+    sidebarContent = (
+      <div className="p-4 flex flex-col gap-2">
+        <div className="flex items-center gap-1.5 text-amber-600">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span className="text-sm font-medium">
+            {TREE_ERROR_LABELS[treeError.code] ?? "Erreur"}
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {treeError.hint}
+        </p>
+      </div>
+    );
+  } else if (tree.length === 0) {
+    sidebarContent = (
+      <div className="p-4 text-sm text-muted-foreground">
+        Aucun document trouvé sur cette branche.
+      </div>
+    );
+  } else {
+    sidebarContent = (
+      <div className="p-2">
+        {tree.map((node) => (
+          <TreeNode
+            key={node.path}
+            node={node}
+            repo={repo}
+            branch={branch}
+            activePath={activePath}
+            headingsMap={headingsMap}
+            depth={0}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <aside
@@ -220,45 +275,7 @@ export function DocsSidebar({ repo, branch }: Props) {
         </span>
       </div>
       <ScrollArea className="flex-1">
-        {loading ? (
-          <div className="p-4 text-sm text-muted-foreground">Chargement…</div>
-        ) : treeError ? (
-          <div className="p-4 flex flex-col gap-2">
-            <div className="flex items-center gap-1.5 text-amber-600">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              <span className="text-sm font-medium">
-                {treeError.code === "no_token"
-                  ? "Token manquant"
-                  : treeError.code === "not_synced"
-                  ? "Dépôt non synchronisé"
-                  : treeError.code === "local_path_missing"
-                  ? "Chemin introuvable"
-                  : "Erreur"}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {treeError.hint}
-            </p>
-          </div>
-        ) : tree.length === 0 ? (
-          <div className="p-4 text-sm text-muted-foreground">
-            Aucun document trouvé sur cette branche.
-          </div>
-        ) : (
-          <div className="p-2">
-            {tree.map((node) => (
-              <TreeNode
-                key={node.path}
-                node={node}
-                repo={repo}
-                branch={branch}
-                activePath={activePath}
-                headingsMap={headingsMap}
-                depth={0}
-              />
-            ))}
-          </div>
-        )}
+        {sidebarContent}
       </ScrollArea>
       {/* Drag handle */}
       <div
@@ -282,12 +299,12 @@ function TreeNode({
   headingsMap,
   depth,
 }: {
-  node: FileTreeNode;
-  repo: string;
-  branch: string;
-  activePath: string | null;
-  headingsMap: Map<string, HeadingInfo[]>;
-  depth: number;
+  readonly node: FileTreeNode;
+  readonly repo: string;
+  readonly branch: string;
+  readonly activePath: string | null;
+  readonly headingsMap: Map<string, HeadingInfo[]>;
+  readonly depth: number;
 }) {
   const [open, setOpen] = useState(
     () => (activePath ? isAncestorOf(node, activePath) : depth === 0)
@@ -297,12 +314,12 @@ function TreeNode({
     return (
       <div>
         <button
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => { setOpen((o) => !o); }}
           className={cn(
             "flex items-center gap-1.5 w-full text-left rounded px-2 py-1 text-sm hover:bg-accent transition-colors",
             "font-semibold"
           )}
-          style={{ paddingLeft: `${6 + depth * 16}px` }}
+          style={{ paddingLeft: `${String(6 + depth * 16)}px` }}
         >
           {open ? (
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -361,12 +378,12 @@ function FileNode({
   headingsMap,
   depth,
 }: {
-  node: FileTreeNode;
-  repo: string;
-  branch: string;
-  activePath: string | null;
-  headingsMap: Map<string, HeadingInfo[]>;
-  depth: number;
+  readonly node: FileTreeNode;
+  readonly repo: string;
+  readonly branch: string;
+  readonly activePath: string | null;
+  readonly headingsMap: Map<string, HeadingInfo[]>;
+  readonly depth: number;
 }) {
   const router = useRouter();
   const review = useReview();
@@ -384,15 +401,15 @@ function FileNode({
   const hasSubHeadings = subHeadings.length > 0;
 
   const [headingsOpen, setHeadingsOpen] = useState(() => isActive);
-  const prevActiveRef = useRef(isActive);
+  const previousActiveRef = useRef(isActive);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (isActive && !prevActiveRef.current) setHeadingsOpen(true);
-    prevActiveRef.current = isActive;
+    if (isActive && !previousActiveRef.current) setHeadingsOpen(true);
+    previousActiveRef.current = isActive;
   }, [isActive]);
 
   const pathSegments = node.path.split("/");
-  const href = `/docs/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${pathSegments.map(encodeURIComponent).join("/")}`;
+  const href = `/docs/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${pathSegments.map((s) => encodeURIComponent(s)).join("/")}`;
 
   const totalCount = fileCommentCount(comments, node.path);
   const { direct: directCounts, fileDirect } =
@@ -415,11 +432,11 @@ function FileNode({
             ? "bg-primary/10 text-primary"
             : "hover:bg-accent text-foreground"
         )}
-        style={{ paddingLeft: `${6 + depth * 16}px` }}
+        style={{ paddingLeft: `${String(6 + depth * 16)}px` }}
       >
         {hasSubHeadings ? (
           <button
-            onClick={() => setHeadingsOpen((o) => !o)}
+            onClick={() => { setHeadingsOpen((o) => !o); }}
             className="shrink-0 p-1 rounded hover:bg-accent/60 transition-colors"
             aria-label={
               headingsOpen ? "Masquer les sections" : "Afficher les sections"
@@ -436,7 +453,7 @@ function FileNode({
         )}
 
         <button
-          onClick={() => router.push(href)}
+          onClick={() => { router.push(href); }}
           className={cn(
             "flex items-center gap-1.5 flex-1 min-w-0 text-left py-1 text-sm",
             isActive ? "font-semibold" : "font-medium"
@@ -474,12 +491,12 @@ function HeadingSubTree({
   isActiveFile,
   depth,
 }: {
-  filePath: string;
-  fileHref: string;
-  headings: HeadingInfo[];
-  directCounts: Map<string, number>;
-  isActiveFile: boolean;
-  depth: number;
+  readonly filePath: string;
+  readonly fileHref: string;
+  readonly headings: HeadingInfo[];
+  readonly directCounts: Map<string, number>;
+  readonly isActiveFile: boolean;
+  readonly depth: number;
 }) {
   const router = useRouter();
   const groups = buildHeadingGroups(headings);
@@ -513,15 +530,15 @@ function H2Group({
   depth,
   router,
 }: {
-  group: HeadingGroup;
-  fileHref: string;
-  directCounts: Map<string, number>;
-  isActiveFile: boolean;
-  depth: number;
-  router: ReturnType<typeof useRouter>;
+  readonly group: HeadingGroup;
+  readonly fileHref: string;
+  readonly directCounts: Map<string, number>;
+  readonly isActiveFile: boolean;
+  readonly depth: number;
+  readonly router: ReturnType<typeof useRouter>;
 }) {
   const h2 = group.heading;
-  const children = group.children;
+  const {children} = group;
   const hasChildren = children.length > 0;
   const [open, setOpen] = useState(() => isActiveFile);
 
@@ -541,7 +558,7 @@ function H2Group({
 
   function navigateToHeading(slug: string) {
     if (isActiveFile) {
-      document.getElementById(slug)?.scrollIntoView({
+      document.querySelector(`#${slug}`)?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
@@ -554,11 +571,11 @@ function H2Group({
     <div>
       <div
         className="flex items-center gap-1 w-full hover:bg-accent rounded transition-colors"
-        style={{ paddingLeft: `${6 + depth * 16}px` }}
+        style={{ paddingLeft: `${String(6 + depth * 16)}px` }}
       >
         {hasChildren ? (
           <button
-            onClick={() => setOpen((o) => !o)}
+            onClick={() => { setOpen((o) => !o); }}
             className="shrink-0 p-1 rounded hover:bg-accent/60"
             aria-label={open ? "Masquer" : "Afficher"}
           >
@@ -573,7 +590,7 @@ function H2Group({
         )}
 
         <button
-          onClick={() => navigateToHeading(h2.slug)}
+          onClick={() => { navigateToHeading(h2.slug); }}
           className="flex items-center flex-1 min-w-0 text-left py-1 text-sm font-medium text-foreground/80 hover:text-foreground"
         >
           <span className="break-words leading-snug">{h2.text}</span>
@@ -589,11 +606,11 @@ function H2Group({
               <div
                 key={h3.slug}
                 className="flex items-center w-full rounded hover:bg-accent transition-colors"
-                style={{ paddingLeft: `${6 + (depth + 1) * 16}px` }}
+                style={{ paddingLeft: `${String(6 + (depth + 1) * 16)}px` }}
               >
                 <span className="w-4 shrink-0 border-l border-border/50 self-stretch ml-2 mr-1" />
                 <button
-                  onClick={() => navigateToHeading(h3.slug)}
+                  onClick={() => { navigateToHeading(h3.slug); }}
                   className="flex items-center flex-1 min-w-0 text-left py-0.5 text-xs text-muted-foreground hover:text-foreground"
                 >
                   <span className="break-words leading-snug">{h3.text}</span>
@@ -647,7 +664,7 @@ function deriveActivePath(
   return pathname
     .slice(prefix.length)
     .split("/")
-    .map(decodeURIComponent)
+    .map((s) => decodeURIComponent(s))
     .join("/");
 }
 
@@ -661,9 +678,9 @@ function collectMarkdownPaths(nodes: FileTreeNode[]): string[] {
     if (node.type === "file" && MARKDOWN_FILE_RE.test(node.name)) {
       paths.push(node.path);
     }
-    node.children?.forEach(walk);
+    for (const child of node.children ?? []) { walk(child); }
   }
-  nodes.forEach(walk);
+  for (const walkNode of nodes) { walk(walkNode); }
   return paths;
 }
 

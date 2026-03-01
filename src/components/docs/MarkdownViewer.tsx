@@ -28,8 +28,8 @@ const MarkdownContent = memo(function MarkdownContent({
   html,
   innerRef,
 }: {
-  html: string;
-  innerRef: Ref<HTMLDivElement>;
+  readonly html: string;
+  readonly innerRef: Ref<HTMLDivElement>;
 }) {
   return (
     <div
@@ -45,9 +45,9 @@ const MarkdownContent = memo(function MarkdownContent({
 /* ────────────────────────────────────────────────────────────── */
 
 interface Props {
-  html: string;
+  readonly html: string;
   /** File path relative to repo root (e.g. "docs/README.md") */
-  filePath?: string;
+  readonly filePath?: string;
 }
 
 /** Describes an open inline annotation widget */
@@ -60,7 +60,7 @@ interface ActiveLine {
 export function MarkdownViewer({ html, filePath }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const review = useReview();
-  const isReviewMode = !!(review?.pr && filePath);
+  const isReviewMode = Boolean(review?.pr && filePath);
 
   const [activeLine, setActiveLine] = useState<ActiveLine | null>(null);
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
@@ -92,10 +92,10 @@ export function MarkdownViewer({ html, filePath }: Props) {
           <button class="mermaid-fullscreen-close" aria-label="Fermer">${CLOSE_ICON}</button>
           <div class="mermaid-fullscreen-content">${svgHtml}</div>
         </div>`;
-      document.body.appendChild(overlay);
+      document.body.append(overlay);
 
-      overlay.addEventListener("click", (e) => {
-        if (e.target === overlay) closeFullscreen();
+      overlay.addEventListener("click", (mouseEvent) => {
+        if (mouseEvent.target === overlay) closeFullscreen();
       });
       overlay
         .querySelector(".mermaid-fullscreen-close")
@@ -103,34 +103,36 @@ export function MarkdownViewer({ html, filePath }: Props) {
     }
 
     function closeFullscreen() {
-      if (overlay && overlay.parentNode) {
-        overlay.parentNode.removeChild(overlay);
+      if (overlay?.parentNode) {
+        overlay.remove();
         overlay = null;
       }
     }
 
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && overlay) closeFullscreen();
+    function handleKeyDown(keyboardEvent: KeyboardEvent) {
+      if (keyboardEvent.key === "Escape" && overlay) closeFullscreen();
     }
-    window.addEventListener("keydown", handleKeyDown);
+    globalThis.addEventListener("keydown", handleKeyDown);
 
     async function renderMermaid() {
-      const mermaid = (await import("mermaid")).default;
+      const mermaidModule = await import("mermaid");
+      const mermaid = mermaidModule.default;
       mermaid.initialize({
         startOnLoad: false,
         theme: "default",
         securityLevel: "loose",
       });
 
-      for (let i = 0; i < rawDivs.length; i++) {
+      for (const [index, div] of rawDivs.entries()) {
         if (cancelled) return;
-        const div = rawDivs[i];
-        const encoded = div.getAttribute("data-diagram") ?? "";
+        const encoded = div.dataset.diagram ?? "";
         const diagram = decodeURIComponent(encoded);
 
         try {
-          const id = `mermaid-svg-${i}-${Math.random().toString(36).slice(2)}`;
+          // eslint-disable-next-line sonarjs/pseudo-random
+          const id = `mermaid-svg-${String(index)}-${Math.random().toString(36).slice(2)}`;
           const { svg } = await mermaid.render(id, diagram);
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (!cancelled) {
             div.innerHTML = svg;
             div.classList.add("mermaid-container");
@@ -139,22 +141,23 @@ export function MarkdownViewer({ html, filePath }: Props) {
             const wrapper = document.createElement("div");
             wrapper.className = "mermaid-wrapper";
             div.parentNode?.insertBefore(wrapper, div);
-            wrapper.appendChild(div);
+            wrapper.append(div);
 
-            const btn = document.createElement("button");
-            btn.className = "mermaid-fullscreen-btn";
-            btn.setAttribute("aria-label", "Afficher en plein écran");
-            btn.title = "Plein écran";
-            btn.innerHTML = MAXIMIZE_ICON;
-            btn.addEventListener("click", () => {
-              const svgEl = div.querySelector("svg");
-              if (svgEl) openFullscreen(svgEl.outerHTML);
+            const button = document.createElement("button");
+            button.className = "mermaid-fullscreen-btn";
+            button.setAttribute("aria-label", "Afficher en plein écran");
+            button.title = "Plein écran";
+            button.innerHTML = MAXIMIZE_ICON;
+            button.addEventListener("click", () => {
+              const svgElement = div.querySelector("svg");
+              if (svgElement) openFullscreen(svgElement.outerHTML);
             });
-            wrapper.appendChild(btn);
+            wrapper.append(button);
           }
-        } catch (err) {
+        } catch (error) {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (!cancelled) {
-            div.innerHTML = `<div class="text-xs text-red-500 font-mono whitespace-pre-wrap break-all">Mermaid error: ${String(err)}</div>`;
+            div.innerHTML = `<div class="text-xs text-red-500 font-mono whitespace-pre-wrap break-all">Mermaid error: ${String(error)}</div>`;
             div.classList.add("mermaid-container");
             div.classList.remove("mermaid-raw");
           }
@@ -162,10 +165,10 @@ export function MarkdownViewer({ html, filePath }: Props) {
       }
     }
 
-    renderMermaid();
+    void renderMermaid();
     return () => {
       cancelled = true;
-      window.removeEventListener("keydown", handleKeyDown);
+      globalThis.removeEventListener("keydown", handleKeyDown);
       closeFullscreen();
     };
   }, [html]);
@@ -184,101 +187,104 @@ export function MarkdownViewer({ html, filePath }: Props) {
     const allBlocks = container.querySelectorAll<HTMLElement>(
       "[data-source-line-start]"
     );
-    const directBlocks = Array.from(allBlocks).filter(
-      (el) => el.parentElement === container
+    const directBlocks = [...allBlocks].filter(
+      (element) => element.parentElement === container
     );
 
-    directBlocks.forEach((block) => {
-      const lineStart = parseInt(block.getAttribute("data-source-line-start")!);
-      const lineEnd   = parseInt(block.getAttribute("data-source-line-end")!);
+    for (const block of directBlocks) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const lineStart = Number.parseInt(block.dataset.sourceLineStart!);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      const lineEnd   = Number.parseInt(block.dataset.sourceLineEnd!);
 
       block.classList.add("review-annotated-block");
-      cleanups.push(() => block.classList.remove("review-annotated-block"));
+      cleanups.push(() => { block.classList.remove("review-annotated-block"); });
 
       /* ── Detect fine-grained sub-items ────────────────────── */
-      const tableRows = Array.from(block.querySelectorAll<HTMLElement>("tr"));
-      const codeLineSpans = Array.from(
-        block.querySelectorAll<HTMLElement>("span.line")
-      ).filter((s) => s.childNodes.length > 0);
+      const tableRows = [...block.querySelectorAll<HTMLElement>("tr")];
+      const codeLineSpans = [...block.querySelectorAll<HTMLElement>("span.line")].filter((s) => s.childNodes.length > 0);
       const subElements: HTMLElement[] = tableRows.length > 0 ? tableRows : codeLineSpans;
       const hasFineGrained = subElements.length > 0;
 
       /* ── Build one gutter button (+ or count badge) ────────── */
-      const makeBtn = (
+      const makeButton = (
         targetLine: number,
-        rowElForLine: HTMLElement | null
+        rowElementForLine: HTMLElement | null
       ): HTMLButtonElement => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "review-line-plus";
-        btn.dataset.line = String(targetLine);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "review-line-plus";
+        button.dataset.line = String(targetLine);
         const count = fileComments.filter((c) => c.line === targetLine).length;
         if (count > 0) {
-          btn.classList.add("review-line-plus--has-comments");
-          btn.innerHTML = `<span class="review-line-count">${count}</span>`;
-          btn.title = `${count} commentaire(s)`;
+          button.classList.add("review-line-plus--has-comments");
+          button.innerHTML = `<span class="review-line-count">${String(count)}</span>`;
+          button.title = `${String(count)} commentaire(s)`;
         } else {
-          btn.textContent = "+";
-          btn.title = `Commenter ligne ${targetLine}`;
+          button.textContent = "+";
+          button.title = `Commenter ligne ${String(targetLine)}`;
         }
-        btn.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const line = parseInt(btn.dataset.line!);
-          setActiveLine((prev) =>
-            prev?.line === line && prev?.blockEl === block
+        button.addEventListener("click", (clickEvent) => {
+          clickEvent.preventDefault();
+          clickEvent.stopPropagation();
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          const line = Number.parseInt(button.dataset.line!);
+          // eslint-disable-next-line sonarjs/no-nested-functions
+          setActiveLine((previous) =>
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            previous?.line === line && previous?.blockEl === block
               ? null
-              : { line, blockEl: block, rowEl: rowElForLine }
+              : { line, blockEl: block, rowEl: rowElementForLine }
           );
         });
-        return btn;
+        return button;
       };
 
-      if (!hasFineGrained) {
-        /* ── Plain block: single button, CSS hover on block ──── */
-        const btn = makeBtn(lineStart, null);
-        block.prepend(btn);
-        cleanups.push(() => btn.remove());
-      } else {
+      if (hasFineGrained) {
         /* ── Fine-grained: one button per sub-element ─────────── */
         block.dataset.fineGrained = "true";
         cleanups.push(() => delete block.dataset.fineGrained);
 
-        const btnMap = new Map<HTMLElement, HTMLButtonElement>();
+        const buttonMap = new Map<HTMLElement, HTMLButtonElement>();
 
-        subElements.forEach((el, i) => {
-          const lineForEl = Math.min(lineStart + i, lineEnd - 1);
-          const btn = makeBtn(lineForEl, el);
-          btn.style.visibility = "hidden";
-          block.appendChild(btn);
-          btnMap.set(el, btn);
-          cleanups.push(() => btn.remove());
-        });
+        for (const [index, element] of subElements.entries()) {
+          const lineForElement = Math.min(lineStart + index, lineEnd - 1);
+          const button = makeButton(lineForElement, element);
+          button.style.visibility = "hidden";
+          block.append(button);
+          buttonMap.set(element, button);
+          cleanups.push(() => { button.remove(); });
+        }
 
         const rafId = requestAnimationFrame(() => {
-          for (const [el, btn] of btnMap) {
-            const midY = el.offsetTop + el.offsetHeight / 2;
-            btn.style.top = `${midY - 11}px`;
-            btn.style.visibility = "";
+          for (const [element, button] of buttonMap) {
+            const midY = element.offsetTop + element.offsetHeight / 2;
+            button.style.top = `${String(midY - 11)}px`;
+            button.style.visibility = "";
           }
         });
-        cleanups.push(() => cancelAnimationFrame(rafId));
+        cleanups.push(() => { cancelAnimationFrame(rafId); });
 
-        for (const [el, btn] of btnMap) {
-          const onEnter = () => btn.classList.add("review-line-plus--row-hover");
-          const onLeave = () => btn.classList.remove("review-line-plus--row-hover");
-          el.addEventListener("mouseenter", onEnter);
-          el.addEventListener("mouseleave", onLeave);
+        for (const [element, button] of buttonMap) {
+          const onEnter = () => { button.classList.add("review-line-plus--row-hover"); };
+          const onLeave = () => { button.classList.remove("review-line-plus--row-hover"); };
+          element.addEventListener("mouseenter", onEnter);
+          element.addEventListener("mouseleave", onLeave);
           cleanups.push(() => {
-            el.removeEventListener("mouseenter", onEnter);
-            el.removeEventListener("mouseleave", onLeave);
+            element.removeEventListener("mouseenter", onEnter);
+            element.removeEventListener("mouseleave", onLeave);
           });
         }
+      } else {
+        /* ── Plain block: single button, CSS hover on block ──── */
+        const button = makeButton(lineStart, null);
+        block.prepend(button);
+        cleanups.push(() => { button.remove(); });
       }
-    });
+    }
 
     return () => {
-      cleanups.forEach((fn) => fn());
+      for (const fn of cleanups) fn();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html, isReviewMode, review?.pr, review?.comments, filePath]);
@@ -294,13 +300,13 @@ export function MarkdownViewer({ html, filePath }: Props) {
     const { blockEl, rowEl } = activeLine;
     const div = document.createElement("div");
     div.className = "inline-comment-widget";
-    blockEl.appendChild(div);
+    blockEl.append(div);
 
     const rafId = requestAnimationFrame(() => {
       const top = rowEl
         ? rowEl.offsetTop + rowEl.offsetHeight
         : blockEl.offsetHeight;
-      div.style.top = `${top}px`;
+      div.style.top = `${String(top)}px`;
     });
 
     setPortalContainer(div);
@@ -317,14 +323,13 @@ export function MarkdownViewer({ html, filePath }: Props) {
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    container
-      .querySelectorAll<HTMLElement>(".review-line-plus--active")
-      .forEach((el) => el.classList.remove("review-line-plus--active"));
+    for (const element of container
+      .querySelectorAll<HTMLElement>(".review-line-plus--active")) element.classList.remove("review-line-plus--active");
     if (activeLine === null) return;
-    const activeBtn = container.querySelector<HTMLElement>(
-      `.review-line-plus[data-line="${activeLine.line}"]`
+    const activeButton = container.querySelector<HTMLElement>(
+      `.review-line-plus[data-line="${String(activeLine.line)}"]`
     );
-    activeBtn?.classList.add("review-line-plus--active");
+    activeButton?.classList.add("review-line-plus--active");
   }, [activeLine]);
 
   /* ──────────────────────────────────────────────────────────── */
@@ -335,12 +340,12 @@ export function MarkdownViewer({ html, filePath }: Props) {
       <MarkdownContent html={html} innerRef={containerRef} />
       {/* Rule rendering-conditional-render: use explicit ternary to avoid
           rendering falsy strings when filePath is "" or portalContainer is null */}
-      {portalContainer !== null && activeLine !== null && filePath != null
+      {portalContainer !== null && activeLine !== null && filePath !== undefined
         ? createPortal(
             <InlineCommentWidget
               line={activeLine.line}
               filePath={filePath}
-              onClose={() => setActiveLine(null)}
+              onClose={() => { setActiveLine(null); }}
             />,
             portalContainer
           )
@@ -358,9 +363,9 @@ function InlineCommentWidget({
   filePath,
   onClose,
 }: {
-  line: number;
-  filePath: string;
-  onClose: () => void;
+  readonly line: number;
+  readonly filePath: string;
+  readonly onClose: () => void;
 }) {
   const review = useReview();
   const [body, setBody] = useState("");
@@ -379,14 +384,14 @@ function InlineCommentWidget({
   useEffect(() => { onCloseRef.current = onClose; });
 
   useEffect(() => {
-    const handle = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
+    const handle = (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key === "Escape") {
+        keyboardEvent.stopPropagation();
         onCloseRef.current();
       }
     };
     document.addEventListener("keydown", handle);
-    return () => document.removeEventListener("keydown", handle);
+    return () => { document.removeEventListener("keydown", handle); };
   }, []); // stable subscription — no dep on onClose
 
   const handleSubmit = async () => {
@@ -439,7 +444,7 @@ function InlineCommentWidget({
                   <button
                     type="button"
                     title="Supprimer ce commentaire"
-                    onClick={() => setConfirmDeleteId(c.id)}
+                    onClick={() => { setConfirmDeleteId(c.id); }}
                     className="inline-comment-delete-btn"
                   >
                     <Trash2 className="h-3 w-3" />
@@ -456,9 +461,9 @@ function InlineCommentWidget({
       {/* New comment form */}
       <Textarea
         value={body}
-        onChange={(e) => setBody(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleSubmit();
+        onChange={(changeEvent) => { setBody(changeEvent.target.value); }}
+        onKeyDown={(keyboardEvent) => {
+          if (keyboardEvent.key === "Enter" && (keyboardEvent.ctrlKey || keyboardEvent.metaKey)) void handleSubmit();
         }}
         placeholder="Votre commentaire… (Ctrl+Entrée pour envoyer)"
         rows={3}
@@ -487,7 +492,7 @@ function InlineCommentWidget({
           <ConfirmModal
             message="Supprimer ce commentaire définitivement ?"
             onConfirm={() => handleDelete(confirmDeleteId, c?.commentType)}
-            onCancel={() => setConfirmDeleteId(null)}
+            onCancel={() => { setConfirmDeleteId(null); }}
           />
         );
       })()}
@@ -514,14 +519,14 @@ function ConfirmModal({
   useEffect(() => { onCancelRef.current = onCancel; });
 
   useEffect(() => {
-    const handle = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
+    const handle = (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key === "Escape") {
+        keyboardEvent.stopPropagation();
         onCancelRef.current();
       }
     };
     document.addEventListener("keydown", handle);
-    return () => document.removeEventListener("keydown", handle);
+    return () => { document.removeEventListener("keydown", handle); };
   }, []); // stable subscription — no dep on onCancel
 
   return createPortal(
@@ -533,7 +538,7 @@ function ConfirmModal({
     >
       <div
         className="confirm-modal"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(clickEvent) => { clickEvent.stopPropagation(); }}
       >
         <p className="confirm-modal-message">{message}</p>
         <div className="confirm-modal-actions">

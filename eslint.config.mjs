@@ -201,6 +201,8 @@ const eslintConfig = [
             "req",
             "res",
             "state",
+            "token",   // next-auth JWT callback
+            "session", // next-auth session callback
           ],
         },
       ],
@@ -243,6 +245,10 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      // Config files use CommonJS module.exports intentionally
+      "next.config.js",
+      "postcss.config.js",
+      "tailwind.config.js",
     ],
   },
 ];
