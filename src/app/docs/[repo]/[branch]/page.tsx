@@ -3,10 +3,10 @@ import { getConfig, getRepoConfig } from "@/lib/config";
 import { BookOpen } from "lucide-react";
 
 interface Props {
-  params: Promise<{ repo: string; branch: string }>;
+  readonly params: Promise<{ readonly repo: string; readonly branch: string }>;
 }
 
-export default async function BranchIndexPage({ params }: Props) {
+export default async function BranchIndexPage({ params }: Props): Promise<React.JSX.Element> {
   const { repo, branch } = await params;
   const repoName = decodeURIComponent(repo);
   const branchName = decodeURIComponent(branch);

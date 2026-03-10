@@ -4,10 +4,38 @@ import { authOptions } from "@/lib/auth";
 import { getConfig, getRepoConfig } from "@/lib/config";
 import { createReviewProvider } from "@/lib/review";
 
+interface ExtendedSession { accessToken?: string; provider?: string; login?: string }
+
+interface PostBody {
+  prNumber: number;
+  action: string;
+  comment: string;
+  filePath?: string;
+  line?: number;
+  commitSha?: string;
+  branch?: string;
+  baseBranch?: string;
+  title?: string;
+}
+
+interface DeleteBody {
+  commentId: string | number;
+  commentType?: string;
+}
+
+/** Fields included in every GET response so the client knows the repo context */
+function repoMeta(repoConfig: { type: string; authMode?: string; defaultBranch?: string }): { authMode: string; repoType: string; defaultBranch: string } {
+  return {
+    authMode: repoConfig.authMode ?? "token",
+    repoType: repoConfig.type,
+    defaultBranch: repoConfig.defaultBranch ?? "main",
+  };
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ repo: string }> }
-) {
+): Promise<Response> {
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
   const { searchParams } = new URL(req.url);
@@ -24,15 +52,16 @@ export async function GET(
     ]);
 
     const repoConfig = getRepoConfig(repoName, config);
+    const meta = repoMeta(repoConfig);
     const provider = createReviewProvider(
       repoConfig,
-      (session as any)?.accessToken,
-      (session as any)?.provider,
-      session?.user?.name ?? undefined
+      (session as ExtendedSession | null)?.accessToken,
+      (session as ExtendedSession | null)?.provider,
+      (session as ExtendedSession | null)?.login ?? session?.user?.name ?? undefined
     );
 
     if (!provider) {
-      return NextResponse.json({ pr: null, comments: [], canReview: false });
+      return NextResponse.json({ pr: null, comments: [], canReview: false, ...meta });
     }
 
     // Determine the full repo path for API calls (e.g. "owner/repo")
@@ -42,11 +71,12 @@ export async function GET(
 
     const pr = await provider.findPR(apiRepo, branch);
     if (!pr) {
-      return NextResponse.json({ pr: null, comments: [], canReview: false });
+      // Provider exists (token is valid) but no PR yet → canReview: true so user can create one
+      return NextResponse.json({ pr: null, comments: [], canReview: true, ...meta });
     }
 
     const comments = await provider.listComments(apiRepo, pr.number);
-    return NextResponse.json({ pr, comments, canReview: true });
+    return NextResponse.json({ pr, comments, canReview: true, ...meta });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
@@ -55,10 +85,10 @@ export async function GET(
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ repo: string }> }
-) {
+): Promise<Response> {
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
-  const body = await req.json();
+  const body = await req.json() as PostBody;
   const { prNumber, action, comment, filePath, line, commitSha } = body;
 
   try {
@@ -70,9 +100,9 @@ export async function POST(
     const repoConfig = getRepoConfig(repoName, config);
     const provider = createReviewProvider(
       repoConfig,
-      (session as any)?.accessToken,
-      (session as any)?.provider,
-      session?.user?.name ?? undefined
+      (session as ExtendedSession | null)?.accessToken,
+      (session as ExtendedSession | null)?.provider,
+      (session as ExtendedSession | null)?.login ?? session?.user?.name ?? undefined
     );
 
     if (!provider) {
@@ -83,6 +113,17 @@ export async function POST(
       ? extractRepoPath(repoConfig.url, repoConfig.type)
       : repoName;
 
+    // ── Create a new PR ──
+    if (action === "create_pr") {
+      const { branch: headBranch, baseBranch, title } = body;
+      if (!headBranch || !baseBranch) {
+        return NextResponse.json({ error: "Missing branch parameters" }, { status: 400 });
+      }
+      const pr = await provider.createPR(apiRepo, headBranch, baseBranch, title);
+      return NextResponse.json({ pr });
+    }
+
+    // ── Comment (global or inline) ──
     if (action === "comment") {
       if (filePath && line) {
         const result = await provider.addInlineComment(
@@ -98,7 +139,10 @@ export async function POST(
         const result = await provider.addComment(apiRepo, prNumber, comment);
         return NextResponse.json(result);
       }
-    } else if (["approve", "request_changes"].includes(action)) {
+    }
+
+    // ── Approve / Request changes ──
+    if (["approve", "request_changes"].includes(action)) {
       await provider.submitReview(apiRepo, prNumber, {
         action,
         body: comment,
@@ -112,11 +156,53 @@ export async function POST(
   }
 }
 
-function extractRepoPath(url: string, type: string): string {
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ repo: string }> }
+): Promise<Response> {
+  const { repo } = await params;
+  const repoName = decodeURIComponent(repo);
+  const body = await req.json() as DeleteBody;
+  const { commentId, commentType } = body;
+
+  if (!commentId) {
+    return NextResponse.json({ error: "Missing commentId" }, { status: 400 });
+  }
+
+  try {
+    const [config, session] = await Promise.all([
+      getConfig(),
+      getServerSession(authOptions),
+    ]);
+
+    const repoConfig = getRepoConfig(repoName, config);
+    const provider = createReviewProvider(
+      repoConfig,
+      (session as ExtendedSession | null)?.accessToken,
+      (session as ExtendedSession | null)?.provider,
+      (session as ExtendedSession | null)?.login ?? session?.user?.name ?? undefined
+    );
+
+    if (!provider) {
+      return NextResponse.json({ error: "No review provider available" }, { status: 400 });
+    }
+
+    const apiRepo = repoConfig.url
+      ? extractRepoPath(repoConfig.url, repoConfig.type)
+      : repoName;
+
+    await provider.deleteComment(apiRepo, commentId, commentType);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: String(error) }, { status: 500 });
+  }
+}
+
+function extractRepoPath(url: string, _type: string): string {
   // Extract "owner/repo" from clone URL
   // https://github.com/owner/repo.git -> owner/repo
   // git@github.com:owner/repo.git -> owner/repo
   const cleaned = url.replace(/\.git$/, "");
-  const match = cleaned.match(/[/:]([\w-]+\/[\w.-]+)$/);
+  const match = /[/:]([\w-]+\/[\w.-]+)$/.exec(cleaned);
   return match ? match[1] : url;
 }

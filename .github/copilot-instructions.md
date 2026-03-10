@@ -1,1 +1,1 @@
-tu trouvera rien ici, tout est dans le dossier .agents
+tu trouvera rien ici, tu as OBLIGATION de lire le dossier .agents avant de démarrer une nouvelle conversation.

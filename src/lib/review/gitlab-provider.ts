@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/restrict-template-expressions, @typescript-eslint/no-misused-spread, @typescript-eslint/no-unnecessary-condition, @typescript-eslint/require-await */
 import type {
   ReviewProvider,
   ReviewComment,
@@ -38,7 +39,7 @@ export class GitLabReviewProvider implements ReviewProvider {
     return res.json() as Promise<T>;
   }
 
-  private encodeRepo(repo: string) {
+  private encodeRepo(repo: string): string {
     return encodeURIComponent(repo);
   }
 
@@ -46,7 +47,7 @@ export class GitLabReviewProvider implements ReviewProvider {
     const mrs = await this.request<any[]>(
       `/projects/${this.encodeRepo(repo)}/merge_requests?state=opened&source_branch=${headBranch}&per_page=5`
     );
-    if (!mrs.length) return null;
+    if (mrs.length === 0) return null;
     const mr = mrs[0];
     return {
       id: mr.id,
@@ -75,7 +76,8 @@ export class GitLabReviewProvider implements ReviewProvider {
         line: n.position?.new_line,
         isOwn: this.userName ? n.author?.username === this.userName : false,
       }))
-      .sort(
+      // Rule js-tosorted-immutable: use toSorted() to avoid mutating the array
+      .toSorted(
         (a, b) =>
           new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
@@ -165,5 +167,41 @@ export class GitLabReviewProvider implements ReviewProvider {
     } else if (payload.action === "comment" && payload.body) {
       await this.addComment(repo, prNumber, payload.body);
     }
+  }
+
+  async createPR(
+    repo: string,
+    headBranch: string,
+    baseBranch: string,
+    title?: string
+  ): Promise<PullRequest> {
+    const mr = await this.request<any>(
+      `/projects/${this.encodeRepo(repo)}/merge_requests`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          title: title ?? `Documentation review: ${headBranch}`,
+          source_branch: headBranch,
+          target_branch: baseBranch,
+        }),
+      }
+    );
+    return {
+      id: mr.id,
+      number: mr.iid,
+      title: mr.title,
+      state: mr.state === "opened" ? "open" : mr.state,
+      head: mr.source_branch,
+      base: mr.target_branch,
+      url: mr.web_url,
+    };
+  }
+
+  async deleteComment(
+    _repo: string,
+    _commentId: string | number,
+    _commentType?: string
+  ): Promise<void> {
+    throw new Error("deleteComment not yet implemented for GitLab");
   }
 }

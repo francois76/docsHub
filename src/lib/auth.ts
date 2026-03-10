@@ -2,33 +2,53 @@ import type { NextAuthOptions } from "next-auth";
 import GithubProvider from "next-auth/providers/github";
 import GitlabProvider from "next-auth/providers/gitlab";
 
-export const authOptions: NextAuthOptions = {
-  providers: [
+const providers: NextAuthOptions["providers"] = [];
+
+if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+  providers.push(
     GithubProvider({
-      clientId: process.env.GITHUB_CLIENT_ID ?? "",
-      clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
+      clientId: process.env.GITHUB_CLIENT_ID,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET,
       authorization: {
         params: {
           scope: "read:user user:email repo",
         },
       },
-    }),
+    })
+  );
+}
+
+if (process.env.GITLAB_CLIENT_ID && process.env.GITLAB_CLIENT_SECRET) {
+  providers.push(
     GitlabProvider({
-      clientId: process.env.GITLAB_CLIENT_ID ?? "",
-      clientSecret: process.env.GITLAB_CLIENT_SECRET ?? "",
-    }),
-  ],
+      clientId: process.env.GITLAB_CLIENT_ID,
+      clientSecret: process.env.GITLAB_CLIENT_SECRET,
+    })
+  );
+}
+
+export const authOptions: NextAuthOptions = {
+  providers,
   callbacks: {
-    async jwt({ token, account }) {
+    jwt({ token, account, profile }) {
       if (account) {
         token.accessToken = account.access_token;
         token.provider = account.provider;
       }
+      if (profile) {
+        // Store the OAuth username/login (not the display name) so we can
+        // compare it against comment authors to determine isOwn.
+        token.login =
+          (profile as Record<string, unknown>).login as string | undefined ??
+          (profile as Record<string, unknown>).username as string | undefined ??
+          token.login;
+      }
       return token;
     },
-    async session({ session, token }) {
-      (session as any).accessToken = token.accessToken;
-      (session as any).provider = token.provider;
+    session({ session, token }) {
+      (session as unknown as Record<string, unknown>).accessToken = token.accessToken;
+      (session as unknown as Record<string, unknown>).provider = token.provider;
+      (session as unknown as Record<string, unknown>).login = token.login;
       return session;
     },
   },

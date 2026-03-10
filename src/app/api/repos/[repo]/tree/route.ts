@@ -5,7 +5,7 @@ import { getConfig, getRepoConfig } from "@/lib/config";
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ repo: string }> }
-) {
+): Promise<Response> {
   const { repo } = await params;
   const repoName = decodeURIComponent(repo);
   const { searchParams } = new URL(req.url);
@@ -18,20 +18,20 @@ export async function GET(
     if (!available) {
       const config = await getConfig();
       const repoConfig = getRepoConfig(repoName, config);
-      const hasToken = !!repoConfig.token;
+      const hasToken = Boolean(repoConfig.token);
       const isLocal = repoConfig.type === "local";
 
       let hint: string;
       let errorCode: string;
       if (isLocal) {
         errorCode = "local_path_missing";
-        hint = `Chemin local introuvable\u00a0: ${repoConfig.path}`;
-      } else if (!hasToken) {
-        errorCode = "no_token";
-        hint = `Aucun token ${repoConfig.type.toUpperCase()} configuré. Ajoutez \`token\` dans .docshub.yml puis cliquez sur Sync.`;
-      } else {
+        hint = `Chemin local introuvable\u00A0: ${repoConfig.path ?? "?"}`;
+      } else if (hasToken) {
         errorCode = "not_synced";
         hint = "Dépôt non cloné. Cliquez sur Sync.";
+      } else {
+        errorCode = "no_token";
+        hint = `Aucun token ${repoConfig.type.toUpperCase()} configuré. Ajoutez \`token\` dans .docshub.yml puis cliquez sur Sync.`;
       }
 
       return NextResponse.json({ tree: [], error: errorCode, hint });

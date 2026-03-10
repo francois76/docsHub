@@ -4,18 +4,18 @@ import { getGitService } from "@/lib/git-registry";
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ repo: string; branch: string; path: string[] }> }
-) {
+): Promise<Response> {
   const { repo, branch, path: pathSegments } = await params;
   const repoName = decodeURIComponent(repo);
   const branchName = decodeURIComponent(branch);
-  const filePath = pathSegments.map(decodeURIComponent).join("/");
+  const filePath = pathSegments.map((s) => decodeURIComponent(s)).join("/");
 
   try {
     const service = await getGitService(repoName);
     const buffer = await service.readFileBuffer(branchName, filePath);
 
     // Determine content type from extension
-    const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+    const extension = filePath.split(".").pop()?.toLowerCase() ?? "";
     const contentTypeMap: Record<string, string> = {
       png: "image/png",
       jpg: "image/jpeg",
@@ -26,7 +26,7 @@ export async function GET(
       pdf: "application/pdf",
       ico: "image/x-icon",
     };
-    const contentType = contentTypeMap[ext] ?? "application/octet-stream";
+    const contentType = contentTypeMap[extension] ?? "application/octet-stream";
 
     return new Response(new Uint8Array(buffer), {
       headers: {

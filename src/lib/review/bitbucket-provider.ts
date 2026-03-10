@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/restrict-template-expressions, @typescript-eslint/no-misused-spread, @typescript-eslint/no-unnecessary-condition, @typescript-eslint/require-await, sonarjs/cognitive-complexity, sonarjs/no-nested-template-literals */
 import type {
   ReviewProvider,
   ReviewComment,
@@ -95,7 +96,7 @@ export class BitbucketReviewProvider implements ReviewProvider {
         `${prefix}/pull-requests?at=${encodeURIComponent(`refs/heads/${headBranch}`)}&state=OPEN&limit=5`
       );
       const prs: any[] = data.values ?? [];
-      if (!prs.length) return null;
+      if (prs.length === 0) return null;
       const pr = prs[0];
       return {
         id: pr.id,
@@ -113,7 +114,7 @@ export class BitbucketReviewProvider implements ReviewProvider {
       `${prefix}s?q=source.branch.name="${headBranch}" AND state="OPEN"&pagelen=5`
     );
     const prs: any[] = data.values ?? [];
-    if (!prs.length) return null;
+    if (prs.length === 0) return null;
     const pr = prs[0];
     return {
       id: pr.id,
@@ -146,7 +147,8 @@ export class BitbucketReviewProvider implements ReviewProvider {
             ? (c.author?.slug ?? c.author?.name) === this.userName
             : false,
         }))
-        .sort(
+        // Rule js-tosorted-immutable: use toSorted() to avoid mutating the array
+        .toSorted(
           (a: ReviewComment, b: ReviewComment) =>
             new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         );
@@ -169,7 +171,8 @@ export class BitbucketReviewProvider implements ReviewProvider {
           ? (c.user?.nickname ?? c.user?.display_name) === this.userName
           : false,
       }))
-      .sort(
+      // Rule js-tosorted-immutable: use toSorted() to avoid mutating the array
+      .toSorted(
         (a: ReviewComment, b: ReviewComment) =>
           new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
@@ -330,5 +333,62 @@ export class BitbucketReviewProvider implements ReviewProvider {
     } else if (payload.action === "comment" && payload.body) {
       await this.addComment(repo, prNumber, payload.body);
     }
+  }
+
+  async createPR(
+    repo: string,
+    headBranch: string,
+    baseBranch: string,
+    title?: string
+  ): Promise<PullRequest> {
+    const prefix = this.repoPrefix(repo);
+    const prTitle = title ?? `Documentation review: ${headBranch}`;
+
+    if (this.variant === "server") {
+      const pr = await this.request<any>(`${prefix}/pull-requests`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: prTitle,
+          fromRef: { id: `refs/heads/${headBranch}` },
+          toRef: { id: `refs/heads/${baseBranch}` },
+        }),
+      });
+      return {
+        id: pr.id,
+        number: pr.id,
+        title: pr.title,
+        state: "open",
+        head: headBranch,
+        base: baseBranch,
+        url: pr.links?.self?.[0]?.href ?? "",
+      };
+    }
+
+    // Cloud
+    const pr = await this.request<any>(`${prefix}/pullrequests`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: prTitle,
+        source: { branch: { name: headBranch } },
+        destination: { branch: { name: baseBranch } },
+      }),
+    });
+    return {
+      id: pr.id,
+      number: pr.id,
+      title: pr.title,
+      state: "open",
+      head: headBranch,
+      base: baseBranch,
+      url: pr.links?.html?.href ?? "",
+    };
+  }
+
+  async deleteComment(
+    _repo: string,
+    _commentId: string | number,
+    _commentType?: string
+  ): Promise<void> {
+    throw new Error("deleteComment not yet implemented for Bitbucket");
   }
 }

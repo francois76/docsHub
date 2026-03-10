@@ -7,7 +7,7 @@ const Badge = ({
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & {
   variant?: "default" | "secondary" | "outline" | "destructive";
-}) => {
+}): React.JSX.Element => {
   const variants = {
     default: "border-transparent bg-primary text-primary-foreground",
     secondary: "border-transparent bg-secondary text-secondary-foreground",

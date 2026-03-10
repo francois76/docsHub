@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getConfig } from "@/lib/config";
 
-export async function GET() {
+export async function GET(): Promise<Response> {
   try {
     const config = await getConfig();
     return NextResponse.json({
@@ -10,6 +10,7 @@ export async function GET() {
         type: r.type,
         defaultBranch: r.defaultBranch ?? "main",
         docsDir: r.docsDir ?? "docs",
+        authMode: r.authMode ?? "token",
       })),
     });
   } catch (error) {

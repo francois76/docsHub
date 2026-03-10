@@ -26,6 +26,7 @@ flowchart TD
             ABR["/api/repos/[repo]/branches"]
             ATR["/api/repos/[repo]/tree"]
             AF["/api/repos/[repo]/file"]
+            AH["/api/repos/[repo]/headings"]
             AS["/api/repos/[repo]/sync"]
             AAS["/api/repos/[repo]/[branch]/assets/[...path]"]
             ARV["/api/reviews/[repo]"]
@@ -66,8 +67,8 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     participant User as Utilisateur
-    participant Page as docs/[repo]/[branch]/[...path]
-    participant API as /api/repos/[repo]/file
+    participant Page as "docs/[repo]/[branch]/[...path]"
+    participant API as "/api/repos/[repo]/file"
     participant GS as GitService
     participant MD as markdown.ts
     participant GIT as Dépôt Git (cache)
@@ -91,27 +92,39 @@ sequenceDiagram
 ```mermaid
 graph TD
     LP["layout.tsx\n(root layout)"] --> AP["AuthProvider"]
-    AP --> TB["TopBar\n(repo + branch selectors, sync,\nbarre de progression, modal erreur)"]
-    AP --> DS["DocsSidebar\n(file tree)"]
-    AP --> CP["[...path]/page.tsx\n(page principale)"]
+    AP --> BL["[branch]/layout.tsx"]
+    BL --> TB["TopBar\n(repo + branch selectors, sync,\nbarre de progression, modal erreur)"]
+    BL --> RP["ReviewProvider\n(contexte React — état revue)"]
 
-    CP --> MV["MarkdownViewer\n(dangerouslySetInnerHTML)"]
-    CP --> RP["ReviewPanel\n(affiché si PR ouverte)"]
+    RP --> DS["DocsSidebar\n(tree + titres H1-H3\n+ badges commentaires)"]
+    RP --> MAIN["main (zone de contenu)"]
+    RP --> RB["ReviewBar\n(barre de revue en bas)"]
 
-    MV -->|portal| MMD["MermaidDiagram\n(client component)"]
+    MAIN --> CP["[...path]/page.tsx\n(page principale)"]
+    CP --> MV["MarkdownViewer"]
+    MV --> MC["MarkdownContent\n(React.memo —\ndangerouslySetInnerHTML)"]
+    MV --> MMD["Mermaid\n(client-side rendering)"]
+    MV --> IC["Commentaires inline\n(DOM manipulation + portals)"]
 
     TB -->|GET /api/repos| API1["API: liste des repos"]
-    TB -->|GET /api/repos/[repo]/branches| API2["API: branches"]
-    TB -->|POST /api/repos/[repo]/sync| API3["API: sync"]
-    DS -->|GET /api/repos/[repo]/tree| API4["API: file tree"]
-    RP -->|GET+POST /api/reviews/[repo]| API5["API: reviews"]
+    TB -->|"GET /api/repos/{repo}/branches"| API2["API: branches"]
+    TB -->|"POST /api/repos/{repo}/sync"| API3["API: sync"]
+    DS -->|"GET /api/repos/{repo}/tree"| API4["API: file tree"]
+    DS -->|"GET /api/repos/{repo}/headings"| API6["API: headings batch"]
+    RP -->|"GET+POST /api/reviews/{repo}"| API5["API: reviews"]
 ```
 
 ---
 
 ## Gestion de l'authentification
 
-docsHub supporte deux modes d'authentification, configurables par dépôt dans `.docshub.yml` :
+docsHub supporte deux modes d'authentification, configurables **par dépôt** dans `.docshub.yml`.
+
+L'interface s'adapte automatiquement au mode choisi :
+- **`authMode: token`** → aucun bouton de connexion ; toutes les opérations (clone, revue) utilisent le token de service.
+- **`authMode: oauth`** → la `ReviewBar` affiche un bouton « Se connecter avec GitHub / GitLab » spécifique au type du dépôt sélectionné. La page de connexion filtre aussi les providers par projet.
+
+Les providers OAuth ne sont enregistrés dans NextAuth que si les variables `*_CLIENT_ID` et `*_CLIENT_SECRET` sont renseignées.
 
 ```mermaid
 flowchart LR
@@ -150,7 +163,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    A["Route API"] -->|getGitService(name)| R["git-registry.ts\n(Map: name → GitService)"]
+    A["Route API"] -->|"getGitService(name)"| R["git-registry.ts\n(Map: name → GitService)"]
     R -->|new si absent| G["GitService\n(simple-git)"]
     G -->|repoPath| C[".docshub-cache/{name}"]
 ```
@@ -165,19 +178,98 @@ Le pipeline de rendu fonctionne en deux phases :
 sequenceDiagram
     participant Server as Serveur (markdown.ts)
     participant Client as Client (MarkdownViewer)
-    participant Mermaid as MermaidDiagram
+    participant Mermaid as Mermaid (client-side)
+    participant Review as Review (inline)
 
     Server->>Server: markdown-it.render(raw)
-    Note over Server: Les blocs ```mermaid``` sont<br/>convertis en <div class="mermaid">
+    Note over Server: Plugin source_lines :<br/>ajoute data-source-line-start/end<br/>sur chaque bloc
+    Note over Server: Les blocs mermaid → div.mermaid-raw
     Server->>Server: Shiki colore les autres blocs de code
-    Server-->>Client: HTML complet
+    Server-->>Client: HTML complet (avec attributs de ligne)
 
-    Client->>Client: dangerouslySetInnerHTML
-    Client->>Client: Détecte .mermaid dans le DOM
-    Client->>Mermaid: createPortal(<MermaidDiagram code=… />)
-    Mermaid->>Mermaid: mermaid.render(code)
+    Client->>Client: MarkdownContent (React.memo)<br/>dangerouslySetInnerHTML
+    Note over Client: Le memo empêche React de<br/>réinitialiser innerHTML lors<br/>des changements d'état internes
+    Client->>Client: Détecte .mermaid-raw dans le DOM
+    Client->>Mermaid: import("mermaid") + render
     Mermaid-->>Client: SVG injecté
+
+    alt PR ouverte
+        Client->>Review: Scan [data-source-line-start] (enfants directs)
+        Review->>Review: Un seul bouton "+" par bloc (prepend, position absolute left:-2rem)
+        Note over Review: Blocs sans table/code (data-fine-grained absent) :<br/>bouton visible via CSS au hover du bloc entier<br/>Tableaux/code (data-fine-grained=true) :<br/>JS mouseover repositionne le bouton sur la ligne survolée<br/>et ajoute .review-line-plus--row-hover → un seul bouton visible
+        Review->>Review: Commentaires insérés AVANT le bloc (.inline-comments-group--collapsed)
+        Review->>Review: Clic "+" → toggle collapsed + ouvre formulaire AVANT le bloc (portal React)
+        Note over Review: Contournement API GitHub :<br/>fallback = issue comment avec<br/><!-- docshub:path=… --> + <!-- docshub:line=N -->.<br/>listComments() extrait les marqueurs depuis<br/>les issue comments pour rétablir path + line.<br/>(visible immédiatement et sur F5)
+    end
 ```
+
+---
+
+## Configuration ESLint stricte
+
+La configuration ESLint (`eslint.config.mjs`) est volontairement la plus stricte possible afin de cadrer le code généré et maintenu par IA. Elle repose sur quatre couches cumulatives.
+
+| Couche | Package | Préset activé | Objectif |
+|--------|---------|---------------|----------|
+| **Base Next.js** | `eslint-config-next` | `core-web-vitals` + `typescript` | React, hooks, @next/next, jsx-a11y |
+| **TypeScript strict** | `typescript-eslint` | `strictTypeChecked` + `stylisticTypeChecked` | Toutes les règles TypeScript avec analyse de types (ex. `no-floating-promises`, `no-unsafe-*`, `switch-exhaustiveness-check`) |
+| **Unicorn** | `eslint-plugin-unicorn` | `flat/recommended` | Meilleures pratiques JS/TS : APIs modernes, nommage, lisibilité |
+| **SonarJS** | `eslint-plugin-sonarjs` | `recommended` | Complexité cognitive, code dupliqué, bugs courants |
+
+### Règles notables ajoutées
+
+- **`@typescript-eslint/consistent-type-imports`** — `import type` obligatoire pour les imports de types uniquement
+- **`@typescript-eslint/explicit-function-return-type`** — type de retour requis sur les fonctions exportées/publiques
+- **`@typescript-eslint/naming-convention`** — PascalCase pour interfaces/types/classes, camelCase pour variables/fonctions
+- **`@typescript-eslint/switch-exhaustiveness-check`** — switch sur un type union doit couvrir tous les cas
+- **`no-console`** — erreur (utiliser un logger ou `void` explicite dans les routes serveur)
+- **`no-param-reassign`** — interdiction de muter les paramètres de fonction
+- **`unicorn/prevent-abbreviations`** — nommage descriptif (exceptions : `props`, `ref`, `req`, `res`, `err`, `ctx`, `docs`, `utils`…)
+
+### Analyse de types (type-aware linting)
+
+Les règles `*TypeChecked` nécessitent l'intégration avec `tsc`. Le parser options `projectService: true` est activé pour tous les fichiers `.ts` / `.tsx`, ce qui permet à ESLint d'utiliser les informations de type réelles. Cela peut allonger le temps de lint (~2-5 s sur ce projet).
+
+---
+
+## Optimisations de performance (Vercel React Best Practices)
+
+Les règles ci-dessous ont été appliquées sur l'ensemble de la codebase (`vercel-react-best-practices` v1.0.0, février 2026).
+
+| Règle | Fichier(s) | Description |
+|-------|-----------|-------------|
+| **bundle-barrel-imports** | `next.config.js` | `optimizePackageImports: ["lucide-react"]` transforme automatiquement les imports nommés en imports directs à la compilation, évitant le chargement des ~1 500 modules de la lib |
+| **async-defer-await** + **async-api-routes** | `api/repos/[repo]/sync/route.ts` | La `Promise` de config est démarrée avant le `try` et réutilisée dans le `catch` (sans second fetch) ; `repoConfig` n'est plus récupéré inutilement dans le chemin de succès |
+| **rendering-animate-svg-wrapper** | `TopBar.tsx` | La classe `animate-spin` est appliquée sur un `<div>` wrapper plutôt que directement sur le SVG `<RefreshCw>`, permettant l'accélération GPU |
+| **js-hoist-regexp** | `[...path]/page.tsx` | La regex `/\.(md\|mdx\|markdown)$/i` est hoistée au niveau module pour éviter sa recréation à chaque appel |
+| **js-tosorted-immutable** | `git-service.ts`, `github-provider.ts`, `gitlab-provider.ts`, `bitbucket-provider.ts` | Remplacement de `.sort()` (mutation in-place) par `.toSorted()` (immutable), ce qui protège les arrays partagés de mutations silencieuses |
+| **rerender-lazy-state-init** | `DocsSidebar.tsx` → `TreeNode`, `H2Group`, `FileNode` | `useState(() => ...)` — les initialiseurs de lazy state évitent les calculs coûteux (traversée d'arbre, état actif) à chaque re-render |
+| **advanced-event-handler-refs** | `MarkdownViewer.tsx` → `InlineCommentWidget`, `ConfirmModal` | Handlers `keydown` (touche Escape) stockés dans une `ref` : la souscription est stable, plus de `eslint-disable-next-line`, plus de risque de stale closure |
+| **rendering-conditional-render** | `MarkdownViewer.tsx` | Remplacement du `&&`-chain incluant `filePath` (string pouvant être `""`) par un ternaire explicite `? createPortal(...) : null` |
+
+---
+
+## Navigation par titres dans la sidebar
+
+`DocsSidebar` offre une navigation arborescente enrichie pour les fichiers Markdown :
+
+1. **Titre H1 comme libellé** — si le fichier a un titre de niveau 1, il remplace le nom du fichier dans la sidebar.
+2. **Arbre H2 / H3** — chaque fichier dispose d'un chevron permettant de déplier ses titres de niveau 2 et 3. Le fichier actif se déplie automatiquement.
+3. **Navigation par ancre** — cliquer sur un titre H2 ou H3 :
+   - si le fichier est déjà ouvert → scroll smooth vers l'ancre (`document.getElementById(slug).scrollIntoView`)
+   - sinon → navigation vers `<href>#<slug>` (le slug est généré de manière compatible GitHub)
+4. **Badges de commentaires (revue)** — quand une PR est ouverte, un badge `<MessageSquare count>` apparaît à côté de chaque item :
+   - **Fichier** : total des commentaires pour ce fichier
+   - **H2** : commentaires dont la ligne source appartient à la section H2 (inclut les H3 sous-jacents)
+   - **H3** : commentaires dont la ligne source appartient à la section H3
+
+L'algorithme d'agrégation des commentaires parcourt les titres à rebours depuis la ligne du commentaire pour identifier le titre le plus proche et ses ancêtres (même logique que la détection de section GitHub).
+
+### API `/api/repos/[repo]/headings`
+
+`GET /api/repos/[repo]/headings?branch=<b>&paths=<p1,p2,...>`
+
+Retourne `{ headings: { "<path>": HeadingInfo[] } }` pour un batch de fichiers Markdown. Les slugs générés utilisent la même fonction `slugifyHeading` que le renderer `markdown-it`, garantissant la cohérence des ancres HTML et des liens sidebar.
 
 ---
 

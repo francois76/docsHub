@@ -21,12 +21,16 @@ interface Repo {
 }
 
 interface Props {
-  currentRepo: string;
-  currentBranch: string;
-  onSync?: () => void;
+  readonly currentRepo: string;
+  readonly currentBranch: string;
+  readonly onSync?: () => void;
 }
 
-export function TopBar({ currentRepo, currentBranch, onSync }: Props) {
+interface ReposResponse { repos?: Repo[] }
+interface BranchesResponse { branches?: { name: string }[]; error?: string; hint?: string }
+interface SyncResponse { error?: string }
+
+export function TopBar({ currentRepo, currentBranch, onSync }: Props): React.JSX.Element {
   const router = useRouter();
   const [repos, setRepos] = useState<Repo[]>([]);
   const [branches, setBranches] = useState<{ name: string }[]>([]);
@@ -35,16 +39,16 @@ export function TopBar({ currentRepo, currentBranch, onSync }: Props) {
   const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/repos")
-      .then((r) => r.json())
-      .then((d) => setRepos(d.repos ?? []));
+    void fetch("/api/repos")
+      .then((r) => r.json() as Promise<ReposResponse>)
+      .then((d) => { setRepos(d.repos ?? []); });
   }, []);
 
   const loadBranches = useCallback(() => {
     if (!currentRepo) return;
     setBranchError(null);
-    fetch(`/api/repos/${encodeURIComponent(currentRepo)}/branches`)
-      .then((r) => r.json())
+    void fetch(`/api/repos/${encodeURIComponent(currentRepo)}/branches`)
+      .then((r) => r.json() as Promise<BranchesResponse>)
       .then((d) => {
         setBranches(d.branches ?? []);
         if (d.error) {
@@ -57,27 +61,27 @@ export function TopBar({ currentRepo, currentBranch, onSync }: Props) {
     loadBranches();
   }, [loadBranches]);
 
-  const handleRepoChange = (name: string) => {
+  const handleRepoChange = (name: string): void => {
     const repo = repos.find((r) => r.name === name);
     router.push(
       `/docs/${encodeURIComponent(name)}/${repo?.defaultBranch ?? "main"}`
     );
   };
 
-  const handleBranchChange = (branch: string) => {
+  const handleBranchChange = (branch: string): void => {
     router.push(
       `/docs/${encodeURIComponent(currentRepo)}/${encodeURIComponent(branch)}`
     );
   };
 
-  const handleSync = async () => {
+  const handleSync = async (): Promise<void> => {
     setSyncing(true);
     setSyncError(null);
     try {
       const res = await fetch(`/api/repos/${encodeURIComponent(currentRepo)}/sync`, {
         method: "POST",
       });
-      const data = await res.json();
+      const data = await res.json() as SyncResponse;
       if (!res.ok || data.error) {
         setSyncError(data.error ?? "Erreur inconnue lors de la synchronisation.");
       } else {
@@ -159,7 +163,10 @@ export function TopBar({ currentRepo, currentBranch, onSync }: Props) {
             disabled={syncing}
             className="gap-1"
           >
-            <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+            {/* Rule rendering-animate-svg-wrapper: animate the wrapper div, not the SVG, for GPU acceleration */}
+            <div className={cn("flex items-center", syncing && "animate-spin")}>
+              <RefreshCw className="h-4 w-4" />
+            </div>
             <span className="hidden sm:inline">{syncing ? "Sync…" : "Sync"}</span>
           </Button>
         </div>
@@ -176,11 +183,11 @@ export function TopBar({ currentRepo, currentBranch, onSync }: Props) {
       {syncError && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-          onClick={() => setSyncError(null)}
+          onClick={() => { setSyncError(null); }}
         >
           <div
             className="bg-background rounded-lg shadow-xl max-w-md w-full p-6 flex flex-col gap-4"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(clickEvent) => { clickEvent.stopPropagation(); }}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-destructive">
@@ -188,7 +195,7 @@ export function TopBar({ currentRepo, currentBranch, onSync }: Props) {
                 <h2 className="font-semibold">Erreur de synchronisation</h2>
               </div>
               <button
-                onClick={() => setSyncError(null)}
+                onClick={() => { setSyncError(null); }}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
                 <X className="h-4 w-4" />
@@ -196,7 +203,7 @@ export function TopBar({ currentRepo, currentBranch, onSync }: Props) {
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">{syncError}</p>
             <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={() => setSyncError(null)}>
+              <Button variant="outline" size="sm" onClick={() => { setSyncError(null); }}>
                 Fermer
               </Button>
             </div>

@@ -9,6 +9,8 @@ export interface ReviewComment {
   path?: string;
   /** Whether this is the current user's comment */
   isOwn?: boolean;
+  /** Internal: which GitHub API endpoint owns this comment */
+  commentType?: "issue_comment" | "review_comment";
 }
 
 export interface PullRequest {
@@ -27,11 +29,11 @@ export type ReviewAction = "approve" | "request_changes" | "comment";
 export interface SubmitReviewPayload {
   action: ReviewAction;
   body?: string;
-  comments?: Array<{
+  comments?: {
     path: string;
     line: number;
     body: string;
-  }>;
+  }[];
 }
 
 /** Unified interface for PR review operations across platforms */
@@ -56,5 +58,18 @@ export interface ReviewProvider {
     repo: string,
     prNumber: number,
     payload: SubmitReviewPayload
+  ): Promise<void>;
+  /** Create a new pull request / merge request */
+  createPR(
+    repo: string,
+    headBranch: string,
+    baseBranch: string,
+    title?: string
+  ): Promise<PullRequest>;
+  /** Delete a comment by id */
+  deleteComment(
+    repo: string,
+    commentId: string | number,
+    commentType?: string
   ): Promise<void>;
 }

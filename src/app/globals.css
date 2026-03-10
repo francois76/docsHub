@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../../tailwind.config.js";
 
 @keyframes indeterminate {
   0% {
@@ -152,6 +151,94 @@
 }
 
 /* Mermaid diagrams */
+.mermaid-wrapper {
+  position: relative;
+  display: block;
+}
+
+.mermaid-wrapper:hover .mermaid-fullscreen-btn {
+  opacity: 1;
+}
+
+.mermaid-fullscreen-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  opacity: 0;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: opacity 0.2s, background-color 0.15s, color 0.15s;
+}
+
+.mermaid-fullscreen-btn:hover {
+  background: #ffffff;
+  color: #374151;
+}
+
+/* Fullscreen overlay — pure DOM, no React state */
+.mermaid-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.mermaid-fullscreen-modal {
+  position: relative;
+  max-height: 90vh;
+  max-width: 90vw;
+  width: 100%;
+  overflow: auto;
+  background: white;
+  border-radius: 0.75rem;
+  padding: 2rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.mermaid-fullscreen-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #6b7280;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.mermaid-fullscreen-close:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.mermaid-fullscreen-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mermaid-fullscreen-content svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .mermaid-container {
   @apply flex justify-center my-6 p-4 bg-muted/30 rounded-lg overflow-x-auto;
 }
@@ -160,10 +247,217 @@
   @apply max-w-full;
 }
 
+/* Prevent double scrollbar: the container already handles overflow */
+.mermaid-container pre {
+  overflow: visible;
+}
+
 /* Shiki code blocks */
 .shiki {
   @apply rounded-lg overflow-x-auto text-sm;
 }
+
+/* ── Review-mode inline annotations ──────────────────────────── */
+
+.review-mode .markdown-body {
+  padding-left: 2.5rem;
+}
+
+/* Any element that hosts a gutter "+" button */
+.review-annotated-block {
+  position: relative;
+}
+
+/* ── Gutter button base ──────────────────────────────────────── */
+.review-line-plus {
+  position: absolute;
+  left: -2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s;
+  z-index: 5;
+}
+
+/* ── Show button on hover ───────────────────────────────────── */
+/* Plain blocks (no fine-grained rows): CSS hover on the block */
+.review-annotated-block:not([data-fine-grained]):hover > .review-line-plus:not(.review-line-plus--has-comments),
+/* Fine-grained (table rows / code lines): JS adds this class on row hover */
+.review-line-plus--row-hover {
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.08);
+}
+
+/* "has-comments" badge: always visible, vivid accent colour */
+.review-line-plus--has-comments {
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.15);
+  font-weight: 700;
+}
+
+/* The specific "+" whose form is open */
+.review-line-plus--active {
+  color: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary)) !important;
+  background: hsl(var(--primary) / 0.15) !important;
+}
+
+.review-line-plus:hover {
+  background: hsl(var(--primary)) !important;
+  color: white !important;
+}
+
+.review-line-count {
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ── Comment thread panel (absolute overlay ABOVE the block) ─── */
+/* REMOVED — replaced by .inline-comment-widget below */
+
+/* ── Unified inline comment widget ──────────────────────────── */
+/* Positioned below the annotated row (top set inline via JS).   */
+.inline-comment-widget {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  /* top is set inline by JS: rowEl.offsetTop + rowEl.offsetHeight */
+  margin-top: 4px;
+}
+
+.inline-comment-widget-inner {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.inline-comment-widget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+/* ── Individual comment cards ───────────────────────────────── */
+.inline-comment-list {
+  margin-bottom: 0.5rem;
+}
+
+.inline-comment-card {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.375rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.inline-comment-card.own {
+  border-left: 3px solid hsl(var(--primary));
+  background: hsl(var(--primary) / 0.04);
+}
+
+.inline-comment-header {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.25rem;
+}
+
+.inline-comment-author {
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.inline-comment-time {
+  margin-left: auto;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.625rem;
+}
+
+.inline-comment-body {
+  color: hsl(var(--muted-foreground));
+  white-space: pre-wrap;
+  font-size: 0.75rem;
+}
+
+.inline-comment-delete-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: hsl(var(--muted-foreground));
+  padding: 0.125rem;
+  border-radius: 0.25rem;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.inline-comment-delete-btn:hover {
+  color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.08);
+}
+
+.inline-comment-divider {
+  border-top: 1px solid hsl(var(--border));
+  margin: 0.5rem 0;
+}
+
+/* ── Confirmation modal ─────────────────────────────────────── */
+.confirm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirm-modal {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  min-width: 280px;
+  max-width: 400px;
+}
+
+.confirm-modal-message {
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+  color: hsl(var(--foreground));
+}
+
+.confirm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+
 
 /* Scrollbar styles */
 ::-webkit-scrollbar {

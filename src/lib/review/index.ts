@@ -20,19 +20,26 @@ export function createReviewProvider(
   if (!activeToken) return null;
 
   switch (type) {
-    case "github":
+    case "github": {
       return new GitHubReviewProvider(activeToken, undefined, userName);
-    case "gitlab":
+    }
+    case "gitlab": {
       return new GitLabReviewProvider(activeToken, undefined, userName);
-    case "bitbucket":
+    }
+    case "bitbucket": {
       return new BitbucketReviewProvider(
         activeToken,
         repoConfig.url ? new URL(repoConfig.url).origin : undefined,
         userName,
         repoConfig.bitbucketVariant ?? "cloud"
       );
-    default:
+    }
+    case "local": {
       return null;
+    }
+    default: {
+      return null;
+    }
   }
 }
 

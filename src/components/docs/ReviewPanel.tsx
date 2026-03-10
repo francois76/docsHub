@@ -20,17 +20,24 @@ import { cn } from "@/lib/utils";
 import type { PullRequest, ReviewComment } from "@/lib/review/types";
 import { toast } from "sonner";
 
-interface Props {
-  repo: string;
-  branch: string;
-  filePath?: string;
+interface ReviewApiResponse {
+  pr?: PullRequest;
+  comments?: ReviewComment[];
+  canReview?: boolean;
+  error?: string;
 }
 
-export function ReviewPanel({ repo, branch, filePath }: Props) {
+interface Props {
+  readonly repo: string;
+  readonly branch: string;
+  readonly filePath?: string;
+}
+
+export function ReviewPanel({ repo, branch }: Props): React.JSX.Element {
   const { data: session } = useSession();
   const [pr, setPr] = useState<PullRequest | null>(null);
   const [comments, setComments] = useState<ReviewComment[]>([]);
-  const [canReview, setCanReview] = useState(false);
+  const [, setCanReview] = useState(false);
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -38,19 +45,19 @@ export function ReviewPanel({ repo, branch, filePath }: Props) {
 
   useEffect(() => {
     setLoading(true);
-    fetch(
+    void fetch(
       `/api/reviews/${encodeURIComponent(repo)}?branch=${encodeURIComponent(branch)}`
     )
-      .then((r) => r.json())
+      .then((r) => r.json() as Promise<ReviewApiResponse>)
       .then((d) => {
         setPr(d.pr ?? null);
         setComments(d.comments ?? []);
         setCanReview(d.canReview ?? false);
       })
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); });
   }, [repo, branch]);
 
-  const submitComment = async () => {
+  const submitComment = async (): Promise<void> => {
     if (!pr || !comment.trim()) return;
     setSubmitting(true);
     try {
@@ -63,19 +70,19 @@ export function ReviewPanel({ repo, branch, filePath }: Props) {
           comment: comment.trim(),
         }),
       });
-      const data = await res.json();
+      const data = await res.json() as ReviewApiResponse;
       if (data.error) throw new Error(data.error);
-      setComments((prev) => [...prev, data as ReviewComment]);
+      setComments((previous) => [...previous, data as ReviewComment]);
       setComment("");
       toast.success("Comment added");
-    } catch (err) {
-      toast.error(`Failed to add comment: ${err}`);
+    } catch (error) {
+      toast.error(`Failed to add comment: ${String(error)}`);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const submitReview = async (action: "approve" | "request_changes") => {
+  const submitReview = async (action: "approve" | "request_changes"): Promise<void> => {
     if (!pr) return;
     setSubmitting(true);
     try {
@@ -88,14 +95,14 @@ export function ReviewPanel({ repo, branch, filePath }: Props) {
           comment: comment.trim() || undefined,
         }),
       });
-      const data = await res.json();
+      const data = await res.json() as ReviewApiResponse;
       if (data.error) throw new Error(data.error);
       setComment("");
       toast.success(
         action === "approve" ? "PR approved!" : "Changes requested"
       );
-    } catch (err) {
-      toast.error(`Failed: ${err}`);
+    } catch (error) {
+      toast.error(`Failed: ${String(error)}`);
     } finally {
       setSubmitting(false);
     }
@@ -138,7 +145,7 @@ export function ReviewPanel({ repo, branch, filePath }: Props) {
           variant="ghost"
           size="icon"
           className="h-7 w-7 shrink-0"
-          onClick={() => setCollapsed((c) => !c)}
+          onClick={() => { setCollapsed((c) => !c); }}
         >
           {collapsed ? (
             <ChevronDown className="h-4 w-4" />
@@ -194,21 +201,12 @@ export function ReviewPanel({ repo, branch, filePath }: Props) {
 
             {/* Review tab */}
             <TabsContent value="review" className="mt-0 p-3 flex flex-col gap-2">
-              {!session ? (
-                <div className="text-center py-4">
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Sign in to review
-                  </p>
-                  <Button size="sm" onClick={() => signIn()}>
-                    Sign In
-                  </Button>
-                </div>
-              ) : (
+              {session ? (
                 <>
                   <Textarea
                     placeholder="Leave a comment or review…"
                     value={comment}
-                    onChange={(e) => setComment(e.target.value)}
+                    onChange={(changeEvent) => { setComment(changeEvent.target.value); }}
                     rows={4}
                     className="text-sm resize-none"
                   />
@@ -247,6 +245,15 @@ export function ReviewPanel({ repo, branch, filePath }: Props) {
                     </Button>
                   </div>
                 </>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Sign in to review
+                  </p>
+                  <Button size="sm" onClick={() => signIn()}>
+                    Sign In
+                  </Button>
+                </div>
               )}
             </TabsContent>
           </Tabs>
@@ -256,7 +263,7 @@ export function ReviewPanel({ repo, branch, filePath }: Props) {
   );
 }
 
-function CommentCard({ comment }: { comment: ReviewComment }) {
+function CommentCard({ comment }: { readonly comment: ReviewComment }): React.JSX.Element {
   return (
     <div
       className={cn(
